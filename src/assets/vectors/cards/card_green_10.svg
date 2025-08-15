@@ -1,29 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 330" width="240" height="330" shape-rendering="geometricPrecision" text-rendering="geometricPrecision">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 330" width="240" height="330">
   <defs>
-    <linearGradient id="grad_green_10" x1="0" y1="0" x2="0" y2="1">
+    <linearGradient id="grad_green_10_filled" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#25a04b" />
       <stop offset="100%" stop-color="#1e7a39" />
-    </linearGradient>
-    <linearGradient id="inner_green_10" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.75" />
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
     </linearGradient>
     <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
       <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="rgba(0,0,0,0.35)" />
     </filter>
   </defs>
-  <!-- Card base -->
-  <rect x="4" y="4" rx="24" ry="24" width="232" height="322" fill="#f9f9f9" stroke="url(#grad_green_10)" stroke-width="10" filter="url(#shadow)" />
-  <!-- Inner glow -->
-  <rect x="18" y="18" rx="18" ry="18" width="204" height="294" fill="url(#inner_green_10)" />
-  <!-- Accent symbol (simple centered ring) -->
-  <circle cx="120" cy="165" r="92" fill="none" stroke="#25a04b" stroke-width="18" stroke-linecap="round" stroke-dasharray="24 18" opacity="0.35" />
+  <rect x="4" y="4" rx="24" ry="24" width="232" height="322" fill="url(#grad_green_10_filled)" stroke="#145026" stroke-width="8" filter="url(#shadow)" />
+  <rect x="4" y="4" rx="24" ry="24" width="232" height="322" fill="rgba(255,255,255,0.06)" />
+  <circle cx="120" cy="157" r="92" fill="none" stroke="rgba(255,255,255,0.32)" stroke-width="18" stroke-linecap="round" stroke-dasharray="24 18" />
   <g font-family="Arial, sans-serif" font-size="36" font-weight="700" fill="#ffffff" stroke="rgba(0,0,0,0.25)" stroke-width="2" paint-order="stroke" text-anchor="middle">
     <text x="32" y="56">10</text>
     <text x="208" y="286" transform="rotate(180 208 286)">10</text>
   </g>
-  <g font-family="Arial, sans-serif" font-size="160" font-weight="800" fill="#ffffff" stroke="rgba(0,0,0,0.3)" stroke-width="6" paint-order="stroke" text-anchor="middle" dominant-baseline="central">
-    <text x="120" y="165">10</text>
+  <g font-family="Arial, sans-serif" font-size="170" font-weight="900" fill="#ffffff" stroke="rgba(0,0,0,0.45)" stroke-width="8" paint-order="stroke" text-anchor="middle" dominant-baseline="central">
+    <text x="120" y="153">10</text>
   </g>
 </svg>
