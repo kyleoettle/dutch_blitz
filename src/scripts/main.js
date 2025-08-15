@@ -155,7 +155,31 @@ window.addEventListener('keydown', function(e) {
         // Try to pick up a nearby card
         var nearestCardId = null;
         var nearestDist = 1.2; // pickup radius
+        // Determine pickup validity client-side to avoid sending invalid ids (prevents grabbing buried indicator cards)
+        function canAttemptPickup(cardId) {
+            if (!gameState) return true; // fallback
+            var card = gameState.cards.get(cardId);
+            if (!card) return false;
+            var ownerPlayer = gameState.players.get(card.owner);
+            if (!ownerPlayer) return false;
+            // Blitz top
+            var isBlitzTop = ownerPlayer.blitzPile.length > 0 && ownerPlayer.blitzPile[ownerPlayer.blitzPile.length - 1] === cardId;
+            // Visible slot presence
+            var isVisible = ownerPlayer.dutchPile.indexOf(cardId) !== -1;
+            // Wood top (postPile) last element
+            var isWoodTop = ownerPlayer.postPile.length > 0 && ownerPlayer.postPile[ownerPlayer.postPile.length - 1] === cardId;
+            // Wood indicator top
+            var indicator = gameState.piles.get('wood_indicator_' + card.owner);
+            var isIndicatorTop = indicator && indicator.cardStack.length > 0 && indicator.cardStack[indicator.cardStack.length - 1] === cardId;
+            // Accept if blitz top, indicator top (faceUp), visible faceUp card, or top wood (even faceDown)
+            if (isIndicatorTop && card.faceUp) return true;
+            if (isBlitzTop) return true;
+            if (isVisible && card.faceUp) return true;
+            if (isWoodTop) return true;
+            return false;
+        }
         Object.keys(cards).forEach(function(id) {
+            if (!canAttemptPickup(id)) return;
             var cardEntity = cards[id];
             var cardPos = cardEntity.getPosition();
             var dx = localPos.x - cardPos.x;
@@ -194,6 +218,17 @@ window.addEventListener('keydown', function(e) {
                 if (dist < nearestPileDist) { nearestPileId = id; nearestPileDist = dist; }
             }
         });
+        // Wood indicator proximity for return
+        if (!nearestPileId && gameState) {
+            var indicator = gameState.piles.get('wood_indicator_' + localPlayerId);
+            if (indicator) {
+                var dxI = localPos.x - indicator.x; var dyI = localPos.y - indicator.y;
+                var distI = Math.sqrt(dxI*dxI + dyI*dyI);
+                if (distI < 2.0) { // WOOD_DRAW_RADIUS client mirror
+                    nearestPileId = 'wood_indicator_' + localPlayerId;
+                }
+            }
+        }
         if (nearestPileId) {
             window.room.send('drop', { cardId: heldCardId, x: localPos.x, y: localPos.y, pileId: nearestPileId });
             console.log('Sent drop message for card:', heldCardId, 'onto pile:', nearestPileId);
@@ -440,6 +475,9 @@ window.syncColyseusState = function(state) {
                 if (isTop) {
                     cards[id].setPosition(card.x, cardHeight, card.y);
                 }
+            } else if (ownerPlayer && ownerPlayer.postPile && ownerPlayer.postPile.includes(card.id)) {
+                // Hide wood (post) pile cards entirely (will later be represented by avatar)
+                cards[id].enabled = false;
             } else {
                 // Non-blitz cards: keep simple small stacking for center dutch piles based on stack index
                 let adjustedHeight = cardHeight;
@@ -483,7 +521,11 @@ window.syncColyseusState = function(state) {
         }
         
         // Update Dutch pile appearance (label entity removed)
-        if (pile.type === "dutch") {
+            if (pile.type === "wood_indicator") {
+                // Wood indicator placeholder color (teal)
+                var mat = piles[id].model.material;
+                mat.diffuse.set(0.1, 0.6, 0.6);
+            } else if (pile.type === "dutch") {
             var material = piles[id].model.material;
             if (pile.cardStack && pile.cardStack.length > 0) {
                 var topCardId = pile.cardStack[pile.cardStack.length - 1];
@@ -499,7 +541,7 @@ window.syncColyseusState = function(state) {
             }
         }
         
-        piles[id].setPosition(pile.x, 0.2, pile.y); // lower pile base for better card stacking visual
+    piles[id].setPosition(pile.x, 0.2, pile.y); // lower pile base for better card stacking visual
         console.log('Pile position:', id, pile.x, pile.y, 'Type:', pile.type, 'Cards:', pile.cardStack.length);
     });
     console.log('Avatars:', avatars);

@@ -1,6 +1,6 @@
 import { Room, Client } from "colyseus";
 import { MyState, Player, Card, Pile } from "./schema/MyState";
-import { MAX_PLAYERS, SHARED_DUTCH_PILE_COUNT, DUTCH_PILE_SPACING, DUTCH_DROP_RADIUS, POST_PLACE_RADIUS } from "./constants";
+import { MAX_PLAYERS, SHARED_DUTCH_PILE_COUNT, DUTCH_PILE_SPACING, DUTCH_DROP_RADIUS, POST_PLACE_RADIUS, WOOD_OFFSET_Y } from "./constants";
 import { DeckRefillService } from "./services/deckRefillService";
 import { LayoutService } from "./services/layoutService";
 import { RuleService } from "./services/ruleService";
@@ -33,10 +33,10 @@ export class MyRoom extends Room<MyState> {
   distributePlayerCards(player: Player, playerId: string): void {
     const deck = this.deckRefill.generatePlayerDeck(playerId);
 
-    // Blitz Pile: 10 cards (face-down except top)
+    // Blitz Pile: 10 cards (tests expect all faceUp initially)
     for (let i = 0; i < 10; i++) {
       const card = deck[i];
-      card.faceUp = true; // all blitz cards start face-up now
+      card.faceUp = true;
       this.state.cards.set(card.id, card);
       player.blitzPile.push(card.id);
     }
@@ -68,6 +68,8 @@ export class MyRoom extends Room<MyState> {
 
   private completePile(pile: Pile) { this.scoring.completePile(pile); }
 
+  // wood indicator logic moved to LayoutService.updateWoodIndicator
+
   restartGame(): void {
     console.log('Restarting game...');
 
@@ -90,6 +92,7 @@ export class MyRoom extends Room<MyState> {
       // Redistribute new cards
       this.distributePlayerCards(player, playerId);
       this.layout.positionPersonalPiles(player, playerId, this.getPlayerAngle(playerId));
+  this.layout.updateWoodIndicator(playerId, player);
     });
 
     // Reset Dutch Piles
@@ -176,6 +179,9 @@ export class MyRoom extends Room<MyState> {
 
     // Position player's personal piles
     this.layout.positionPersonalPiles(player, client.sessionId, angle);
+
+  // Create / position wood draw indicator using computed visible slots
+  this.layout.updateWoodIndicator(client.sessionId, player);
 
     console.log(`Player ${client.sessionId} cards distributed. Blitz: ${player.blitzPile.length}, Post: ${player.postPile.length}, Dutch: ${player.dutchPile.length}`);
 

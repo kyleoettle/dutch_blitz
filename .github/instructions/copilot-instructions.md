@@ -1,0 +1,1 @@
+always refer to the `architecture.md` file for guidance on the overall system design, component interactions, services and testing.

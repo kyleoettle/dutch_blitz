@@ -25,14 +25,20 @@ export function registerPickupHandler(room: MyRoom) {
       return;
     }
     const isTopOfBlitz = player.blitzPile.length > 0 && player.blitzPile[player.blitzPile.length - 1] === card.id;
-    const isVisiblePost = player.dutchPile.includes(card.id);
-    const isTopOfWood = player.postPile.length > 0 && player.postPile[player.postPile.length - 1] === card.id;
-    if (!isTopOfBlitz && player.blitzPile.includes(card.id)) {
+    const indicator = room.state.piles.get(`wood_indicator_${client.sessionId}`);
+    const indicatorTopId = indicator && indicator.cardStack.length > 0 ? indicator.cardStack[indicator.cardStack.length - 1] : undefined;
+  const isWoodIndicatorTop = indicatorTopId === card.id && card.faceUp;
+  const visibleIndex = player.dutchPile.indexOf(card.id);
+  const isTopOfWood = player.postPile.length > 0 && player.postPile[player.postPile.length - 1] === card.id;
+    const isVisibleSlotCard = visibleIndex !== -1;
+
+    // Enforce source validity
+    if (player.blitzPile.includes(card.id) && !isTopOfBlitz) {
       console.log('Pickup rejected: only top Blitz card may be picked');
       return;
     }
-    if (!isTopOfBlitz && !isVisiblePost && !isTopOfWood) {
-      console.log('Pickup ignored: card not from a valid personal pile (blitz top, visible post slot, or top wood)');
+    if (!isTopOfBlitz && !isWoodIndicatorTop && !isVisibleSlotCard && !isTopOfWood) {
+      console.log('Pickup ignored: card not a valid source (need top Blitz, visible slot, top Wood Indicator, or top Wood)');
       return;
     }
     card.pickedUp = true;
@@ -49,19 +55,19 @@ export function registerPickupHandler(room: MyRoom) {
         if (nextCard) nextCard.faceUp = true;
       }
       player.heldOriginSource = 'blitz';
-    } else if (isVisiblePost) {
-      const idx = player.dutchPile.indexOf(card.id);
-      if (idx !== -1) {
-        player.dutchPile[idx] = "";
-        player.heldFromVisibleIndex = idx;
-      }
-      room["repositionDutchPile"](player, client.sessionId);
-      player.heldOriginSource = 'postSlot';
+    } else if (isWoodIndicatorTop) {
+      if (indicator) indicator.cardStack.pop();
+      player.heldOriginSource = 'woodIndicator';
     } else if (isTopOfWood) {
       player.postPile.pop();
-      card.faceUp = true;
+      // stays faceDown while held unless you want visual feedback; we'll keep faceDown
       player.heldOriginSource = 'wood';
+    } else if (isVisibleSlotCard) {
+      player.heldOriginSource = 'postSlot';
+      player.heldFromVisibleIndex = visibleIndex;
+      // Remove card placeholder; refill later after place/cancel
+      player.dutchPile[visibleIndex] = '';
     }
-    console.log(`Player ${client.sessionId} picked up card ${card.id} from ${isTopOfBlitz ? 'Blitz top' : 'visible Dutch row'}`);
+    console.log(`Player ${client.sessionId} picked up card ${card.id} from ${isTopOfBlitz ? 'Blitz' : isWoodIndicatorTop ? 'WoodIndicator' : isTopOfWood ? 'Wood' : 'VisibleSlot'}${isVisibleSlotCard ? ' idx '+visibleIndex: ''}`);
   });
 }

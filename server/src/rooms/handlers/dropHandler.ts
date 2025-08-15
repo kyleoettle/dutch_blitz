@@ -1,7 +1,7 @@
 import { MyRoom } from "../MyRoom";
 import { Client } from "colyseus";
 import { Pile, Card } from "../schema/MyState";
-import { DUTCH_DROP_RADIUS } from "../constants";
+import { DUTCH_DROP_RADIUS, WOOD_DRAW_RADIUS } from "../constants";
 
 export function registerDropHandler(room: MyRoom) {
   room.onMessage("drop", (client: Client, message: { pileId: string }) => {
@@ -14,6 +14,30 @@ export function registerDropHandler(room: MyRoom) {
     const card = room.state.cards.get(player.heldCard);
     if (!card) {
       console.log('Drop ignored: held card not found');
+      return;
+    }
+    // Wood indicator drop-back support
+    if (message.pileId && message.pileId.startsWith('wood_indicator_')) {
+      const indicator = room.state.piles.get(message.pileId) as Pile | undefined;
+      if (!indicator) { console.log('Drop ignored: wood indicator not found'); return; }
+      // Proximity check for consistency with draw radius
+      const dxW = player.x - indicator.x; const dyW = player.y - indicator.y;
+      const distW = Math.sqrt(dxW*dxW + dyW*dyW);
+      if (distW > WOOD_DRAW_RADIUS) { console.log('Drop ignored: too far from wood indicator'); return; }
+      // Only allow if held card originated from wood or woodIndicator
+      if (player.heldOriginSource !== 'wood' && player.heldOriginSource !== 'woodIndicator') {
+        console.log('Drop ignored: held card not from wood source'); return; }
+      // Make previous top faceDown
+      if (indicator.cardStack.length > 0) {
+        const prevTopId = indicator.cardStack[indicator.cardStack.length - 1];
+        const prevTop = room.state.cards.get(prevTopId);
+        if (prevTop) prevTop.faceUp = false;
+      }
+      indicator.cardStack.push(card.id);
+      card.x = indicator.x; card.y = indicator.y; card.faceUp = true; card.pickedUp = false;
+      player.heldCard = '';
+      player.heldOriginSource = '';
+      console.log(`Player ${client.sessionId} returned card ${card.id} to wood indicator.`);
       return;
     }
     if (!message.pileId || !message.pileId.startsWith('dutch_pile_')) {

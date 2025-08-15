@@ -39,16 +39,35 @@ export class RestoreProximityService {
       }
       this.repositionVisible(player, card.owner);
     } else if (player.heldOriginSource === 'blitz') {
-      player.blitzPile.push(card.id);
-      card.faceUp = true;
+  player.blitzPile.push(card.id);
+  card.faceUp = true; // keep all blitz faceUp for now (test expectation)
       this.positionPersonal(player, card.owner, this.getPlayerAngle(card.owner));
+    } else if (player.heldOriginSource === 'woodIndicator') {
+      // Return to top of wood indicator stack
+      const indicator = this.state.piles.get(`wood_indicator_${card.owner}`) as Pile | undefined;
+      if (indicator) {
+        // Previous top (if any) becomes faceDown
+        if (indicator.cardStack.length > 0) {
+          const prevTopId = indicator.cardStack[indicator.cardStack.length - 1];
+          const prevTop = this.state.cards.get(prevTopId);
+          if (prevTop) prevTop.faceUp = false;
+        }
+        indicator.cardStack.push(card.id);
+        card.x = indicator.x;
+        card.y = indicator.y;
+        card.faceUp = true;
+      } else {
+        // fallback to wood pile bottom
+        player.postPile.push(card.id);
+        card.faceUp = false;
+      }
     } else if (player.heldOriginSource === 'wood') {
       player.postPile.push(card.id);
       card.faceUp = false;
       this.positionPersonal(player, card.owner, this.getPlayerAngle(card.owner));
     } else {
-      player.blitzPile.push(card.id);
-      card.faceUp = true;
+  player.blitzPile.push(card.id);
+  card.faceUp = true;
       this.positionPersonal(player, card.owner, this.getPlayerAngle(card.owner));
     }
     player.heldCard = "";

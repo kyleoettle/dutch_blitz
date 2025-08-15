@@ -14,3 +14,4 @@ export const CANCEL_RADIUS = 1.5; // radius for cancel/return action
 export const MAX_VISIBLE_SLOTS = 3;
 export const BLITZ_COUNT = 10; // number of blitz cards per player
 export const TOTAL_CARDS_PER_PLAYER = 40; // 4 colors * values 1..10
+export const WOOD_DRAW_RADIUS = 2.0; // proximity radius required to draw from wood indicator

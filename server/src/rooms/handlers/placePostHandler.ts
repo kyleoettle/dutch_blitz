@@ -8,7 +8,29 @@ export function registerPlacePostHandler(room: MyRoom) {
     if (!player || !player.heldCard || room.state.gameStatus !== "playing") return;
     const card = room.state.cards.get(player.heldCard);
     if (!card) return;
-    let targetSlot = typeof message?.slot === 'number' ? message.slot : player.dutchPile.indexOf("");
+    // Determine target slot: explicit index, else choose nearest empty slot to player position
+    let targetSlot: number;
+    if (typeof message?.slot === 'number') {
+      targetSlot = message.slot;
+    } else {
+      const slotPositionsAll = (room as any)["getVisibleSlotPositions"](client.sessionId, player);
+      const emptyIndices: number[] = [];
+      for (let i = 0; i < 3; i++) if (player.dutchPile[i] === '') emptyIndices.push(i);
+      if (emptyIndices.length === 0) {
+        console.log('placePost ignored: no empty slots');
+        return;
+      }
+      // Pick nearest by Euclidean distance to player
+      let bestIdx = emptyIndices[0];
+      let bestDist = Infinity;
+      emptyIndices.forEach(idx => {
+        const pos = slotPositionsAll[idx];
+        const dx = player.x - pos.x; const dy = player.y - pos.y;
+        const d = dx*dx + dy*dy;
+        if (d < bestDist) { bestDist = d; bestIdx = idx; }
+      });
+      targetSlot = bestIdx;
+    }
     if (targetSlot < 0 || targetSlot > 2) {
       console.log('placePost ignored: invalid slot index');
       return;
@@ -28,6 +50,7 @@ export function registerPlacePostHandler(room: MyRoom) {
       return;
     }
     player.dutchPile[targetSlot] = card.id;
+  card.faceUp = true; // any card entering visible slot becomes face-up
     card.pickedUp = false;
     player.heldCard = "";
     player.heldFromVisibleIndex = -1;

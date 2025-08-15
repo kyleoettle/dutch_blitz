@@ -59,14 +59,14 @@ function canPickupCard(cardData, playerData) {
     if (!cardData.faceUp) return false;
     if (cardData.pickedUp) return false;
     if (cardData.owner !== playerData.sessionId) return false;
-    
-    // Must be top of Blitz or Dutch pile
+    // Top Blitz card always eligible
     var isTopOfBlitz = playerData.blitzPile.length > 0 && 
         playerData.blitzPile[playerData.blitzPile.length - 1] === cardData.id;
-    var isTopOfDutch = playerData.dutchPile.length > 0 && 
-        playerData.dutchPile[playerData.dutchPile.length - 1] === cardData.id;
-    
-    return isTopOfBlitz || isTopOfDutch;
+    if (isTopOfBlitz) return true;
+    // Wood indicator: represented by overlapping face-up cards NOT in blitz/dutch piles; client cannot easily know stack except by z-order; rely on server for enforcement and allow attempt only if card is faceUp and not in blitzPile/dutchPile lists
+    // To reduce false positives, disallow if card appears in dutchPile array at any position (legacy) or deeper in blitz pile.
+    if (playerData.dutchPile && playerData.dutchPile.includes(cardData.id)) return false;
+    return false; // server now handles wood indicator pickup; client will send pickup on keypress based on proximity logic
 }
 
 // Check if a card can be placed on a Dutch pile
