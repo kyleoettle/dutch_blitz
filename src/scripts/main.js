@@ -118,6 +118,9 @@ function createCardBackMaterial() {
 // Entities for avatars, cards, piles
 
 var avatars = {};
+// Track whether GLB avatar asset is loaded
+var avatarAsset = null;
+var avatarAssetRequested = false;
 var cards = {};
 var piles = {};
 
@@ -128,6 +131,9 @@ var localVelocity = { x: 0, y: 0 };
 var moveSpeed = 0.035; // even slower for fine control
 var accel = 0.035;
 var friction = 0.07;
+// Some GLB avatars face +Z by default; our math assumes -Z forward. Offset yaw by 180 if facing is inverted.
+// Adjust if your model's forward isn't +Z. 0 assumes model forward is +Z.
+var AVATAR_YAW_OFFSET_DEG = 0;
 var heldCardId = null;
 var gameState = null; // Store the current game state globally
 var lastAutoPickupTime = 0;
@@ -272,6 +278,19 @@ function updateMovement(dt) {
     // Move
     localPos.x += localVelocity.x;
     localPos.y += localVelocity.y;
+
+    // Rotate local avatar to face input direction (supports diagonals)
+    if (avatars[localPlayerId]) {
+        if (mag > 0.001) {
+            // Compute yaw so that W (0,-1) faces forward (0 deg), A (-1,0) = -90, S (0,1)=180, D (1,0)=90
+            var yawRad = Math.atan2(inputX, -inputY);
+            // Use atan2(x, z) where z derived from inputY (world z movement) for correct left/right
+            // Direction vector: (inputX, inputY) corresponds to (worldX, worldZ)
+            var yawRad = Math.atan2(inputX, inputY);
+            var yawDeg = yawRad * 180 / Math.PI + AVATAR_YAW_OFFSET_DEG;
+            avatars[localPlayerId].setEulerAngles(0, yawDeg, 0);
+        }
+    }
     // Send movement to server
     if ((inputX !== 0 || inputY !== 0) && window.room) {
         window.room.send('move', { x: localPos.x, y: localPos.y });
@@ -419,15 +438,70 @@ window.syncColyseusState = function(state) {
     state.players.forEach(function(player, id) {
         if (!avatars[id]) {
             console.log('Creating avatar for player:', id, player);
-            var avatar = new pc.Entity();
-            avatar.addComponent('model', { type: 'capsule' });
-            avatar.setLocalScale(1, 2, 1);
-            app.root.addChild(avatar);
+            // Lazy-load GLB avatar once
+            function createPrimitiveFallback(){
+                var fallback = new pc.Entity();
+                fallback.addComponent('model', { type: 'capsule' });
+                fallback.setLocalScale(1, 2, 1);
+                app.root.addChild(fallback);
+                return fallback;
+            }
+            function instantiateAvatar(){
+                if (avatarAsset && avatarAsset.resource) {
+                    try {
+                        // PlayCanvas GLB container provides instantiateRenderEntity() for render components
+                        var containerRes = avatarAsset.resource; // ContainerResource
+                        var entity = (containerRes.instantiateRenderEntity ? containerRes.instantiateRenderEntity() : (containerRes.instantiate ? containerRes.instantiate() : null));
+                        if (!entity) { console.warn('Avatar container had no instantiate method'); return createPrimitiveFallback(); }
+                        entity.setLocalScale(1,1,1);
+                        app.root.addChild(entity);
+                        return entity;
+                    } catch (e) {
+                        console.warn('Failed to instantiate avatar GLB, using fallback', e);
+                        return createPrimitiveFallback();
+                    }
+                }
+                return createPrimitiveFallback();
+            }
+            if (!avatarAsset && !avatarAssetRequested) {
+                avatarAssetRequested = true;
+                app.assets.loadFromUrl('assets/models/avatar.glb', 'container', function (err, asset) {
+                    if (err) { console.warn('Avatar GLB load failed, falling back to primitive.', err); return; }
+                    avatarAsset = asset;
+                    console.log('Avatar GLB loaded successfully. Upgrading existing avatars.');
+                    // Replace existing primitive avatars with GLB instance
+                    Object.keys(avatars).forEach(function(pid){
+                        var oldEnt = avatars[pid];
+                        if (oldEnt && oldEnt.parent) { oldEnt.destroy(); }
+                        var newEnt = instantiateAvatar();
+                        avatars[pid] = newEnt;
+                        // Preserve position
+                        var playerState = state.players.get(pid);
+                        if (playerState) newEnt.setPosition(playerState.x, 1, playerState.y);
+                    });
+                });
+            }
+            var avatar = instantiateAvatar();
             avatars[id] = avatar;
         }
         // Only update other players' positions from server, not local player
         if (id !== localPlayerId) {
-            avatars[id].setPosition(player.x, 1, player.y);
+            // Track previous pos for remote direction facing
+            var av = avatars[id];
+            var prevX = av.__prevX;
+            var prevZ = av.__prevZ;
+            av.setPosition(player.x, 1, player.y);
+            if (prevX !== undefined && prevZ !== undefined) {
+                var dxr = player.x - prevX;
+                var dzr = player.y - prevZ; // state.y maps to world z
+                var magR = Math.sqrt(dxr*dxr + dzr*dzr);
+                if (magR > 0.0005) {
+                    var yawRadR = Math.atan2(dxr, dzr);
+                    var yawDegR = yawRadR * 180 / Math.PI + AVATAR_YAW_OFFSET_DEG;
+                    av.setEulerAngles(0, yawDegR, 0);
+                }
+            }
+            av.__prevX = player.x; av.__prevZ = player.y;
         }
     });
     // Sync cards with face-up/face-down rendering
