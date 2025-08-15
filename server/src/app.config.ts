@@ -26,13 +26,7 @@ export default config({
             res.send("It's time to kick ass and chew bubblegum!");
         });
 
-        /**
-         * Use @colyseus/playground
-         * (It is not recommended to expose this route in a production environment)
-         */
-        if (process.env.NODE_ENV !== "production") {
-            app.use("/", playground());
-        }
+    // Removed Colyseus Playground route to prevent protocol mismatch
 
         /**
          * Use @colyseus/monitor

@@ -1,17 +1,19 @@
-// Colyseus client basic setup
-import { Client } from 'colyseus.js';
+console.log('colyseus-client.js loaded');
+// Colyseus client basic setup (browser global)
+var client = new Colyseus.Client('ws://localhost:2567');
+window.room = null;
 
-const client = new Client('ws://localhost:2567');
-let room;
-
-async function joinRoom() {
-  room = await client.joinOrCreate('game_room');
-  room.onStateChange((state) => {
-    // Sync player, card, pile states
+client.joinOrCreate('my_room').then(function(room) {
+  window.room = room;
+  room.onStateChange(function(state) {
+    if (window.syncColyseusState) {
+      window.syncColyseusState(state);
+    }
+    console.log('State updated:', state);
   });
-  room.onMessage((message) => {
-    // Handle server messages
+  room.onMessage(function(message) {
+    console.log('Message from server:', message);
   });
-}
-
-joinRoom();
+}).catch(function(e) {
+  console.error('Failed to join room:', e);
+});

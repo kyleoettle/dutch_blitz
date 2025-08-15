@@ -9,16 +9,16 @@ Create a 3D multiplayer game inspired by Dutch Blitz and Fall Guys, playable in 
 
 
 ## Phase 1: PlayCanvas + Colyseus Scaffold (Rapid Prototype)
-- [ ] Scaffold PlayCanvas project and Colyseus server for local development
-- [ ] Implement player avatars that can move around (WASD/mouse for desktop, touch for mobile)
-- [ ] Place cards on the ground that can be picked up by players
-- [ ] Add central piles where cards can be placed
-- [ ] Implement multiplayer sync for player positions, card states, and pile states using Colyseus
-- [ ] Enable picking up cards and dropping them into piles with correct scoring
-- [ ] Achieve a fully playable browser prototype for immediate local testing
+- [x] Scaffold PlayCanvas project and Colyseus server for local development
+- [x] Implement player avatars that can move around (WASD/mouse for desktop, touch for mobile)
+- [x] Place cards on the ground that can be picked up by players
+- [x] Add central piles where cards can be placed
+- [x] Implement multiplayer sync for player positions, card states, and pile states using Colyseus
+- [x] Enable picking up cards and dropping them into piles with correct scoring
+- [x] Achieve a fully playable browser prototype for immediate local testing
 
 ## Phase 2: Project Structure & Netlify Setup
-- [ ] Organize project directories for assets, scripts, multiplayer logic
+- [x] Organize project directories for assets, scripts, multiplayer logic
 - [ ] Configure Netlify for deployment
 
 ## Phase 3: Art & Animation
@@ -77,8 +77,8 @@ Create a 3D multiplayer game inspired by Dutch Blitz and Fall Guys, playable in 
 - **Netlify**: Host static build. Use Netlify Functions if backend logic is needed.
 
 ## Milestones & Deliverables
-- [ ] Playable prototype with basic movement and card interaction
-- [ ] Multiplayer demo with 2+ players
+- [x] Playable prototype with basic movement and card interaction
+- [x] Multiplayer demo with 2+ players
 - [ ] Final polished game deployed on Netlify
 
 ---
