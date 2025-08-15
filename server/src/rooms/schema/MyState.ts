@@ -9,12 +9,14 @@ export class Player extends Schema {
   @type(["string"]) dutchPile: string[] = []; // up to 3 cards, face-up
   @type("number") score: number = 0; // for scoring system
   @type("number") heldFromVisibleIndex: number = -1; // index in dutchPile a card was picked from (for delayed refill)
+  @type("number") heldOriginX: number = 0; // original pickup x (for proximity-based return)
+  @type("number") heldOriginY: number = 0; // original pickup y
 }
 
 export class Card extends Schema {
   @type("string") id: string = "";
   @type("number") x: number = 0;
-  @type("number") y: numbesdsr = 0;
+  @type("number") y: number = 0;
   @type("boolean") pickedUp: boolean = false;
   @type("number") value: number = 1; // 1-10 for Dutch Blitz (not 1-13)
   @type("string") color: string = "red"; // red, green, blue, yellow

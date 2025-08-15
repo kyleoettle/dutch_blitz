@@ -130,6 +130,8 @@ var accel = 0.035;
 var friction = 0.07;
 var heldCardId = null;
 var gameState = null; // Store the current game state globally
+var lastAutoPickupTime = 0;
+var autoPickupCooldown = 250; // ms between auto pickups
 
 // WASD movement controls
 var keys = {};
@@ -178,30 +180,26 @@ window.addEventListener('keydown', function(e) {
     }
     // Drop card
     if (e.key.toLowerCase() === 'q' && heldCardId && window.room) {
-        console.log('Drop key pressed. heldCardId:', heldCardId);
-        // Check for nearby Dutch pile only
+        console.log('Drop / cancel key pressed. heldCardId:', heldCardId);
         var nearestPileId = null;
-        var nearestPileDist = 1.5; // drop radius
+        var nearestPileDist = 1.5;
         Object.keys(piles).forEach(function(id) {
-            // Only allow dropping on Dutch piles
             if (id.startsWith('dutch_pile_')) {
                 var pileEntity = piles[id];
                 var pilePos = pileEntity.getPosition();
                 var dx = localPos.x - pilePos.x;
                 var dy = localPos.y - pilePos.z;
                 var dist = Math.sqrt(dx*dx + dy*dy);
-                if (dist < nearestPileDist) {
-                    nearestPileId = id;
-                    nearestPileDist = dist;
-                }
+                if (dist < nearestPileDist) { nearestPileId = id; nearestPileDist = dist; }
             }
         });
         if (nearestPileId) {
             window.room.send('drop', { cardId: heldCardId, x: localPos.x, y: localPos.y, pileId: nearestPileId });
             console.log('Sent drop message for card:', heldCardId, 'onto pile:', nearestPileId);
         } else {
-            console.log('No pile nearby - card drop rejected. Move closer to a pile!');
-            // Optional: Add visual/audio feedback for invalid drop
+            // Cancel / return card
+            window.room.send('cancel', { cardId: heldCardId });
+            console.log('No pile nearby - canceling and returning card.');
         }
     }
 });
@@ -253,6 +251,33 @@ function updateMovement(dt) {
         // Update held card position to follow avatar
         if (heldCardId && cards[heldCardId]) {
             cards[heldCardId].setPosition(localPos.x, 2, localPos.y + 0.7); // above avatar
+        }
+
+        // Automatic pickup of top visible dutch card if overlapping and not already holding one
+        if (!heldCardId && gameState && gameState.players && typeof gameState.players.get === 'function') {
+            const player = gameState.players.get(localPlayerId);
+            if (player && player.dutchPile && player.dutchPile.length > 0) {
+                const now = performance.now();
+                if (now - lastAutoPickupTime > autoPickupCooldown) {
+                    // Consider the right-most (last) card in dutchPile as the 'top'/primary auto-pick target
+                    const targetCardId = player.dutchPile[player.dutchPile.length - 1];
+                    const targetEntity = cards[targetCardId];
+                    if (targetEntity) {
+                        const pos = targetEntity.getPosition();
+                        const dx = localPos.x - pos.x;
+                        const dz = localPos.y - pos.z;
+                        const dist = Math.hypot(dx, dz);
+                        if (dist < 1.0) { // proximity threshold
+                            if (window.room) {
+                                window.room.send('pickup', { cardId: targetCardId });
+                                heldCardId = targetCardId;
+                                lastAutoPickupTime = now;
+                                console.log('Auto-picked visible dutch card', targetCardId);
+                            }
+                        }
+                    }
+                }
+            }
         }
         
         // Visual feedback: highlight nearby Dutch pile when holding a card (only if gameState exists)
@@ -428,18 +453,28 @@ window.syncColyseusState = function(state) {
             cards[id].setPosition(avatarPos.x, 2, avatarPos.z + 0.7); // above avatar
         } else {
             // Calculate proper stacking height
-            var cardHeight = 0.5; // base height above ground
-            var stackPosition = 0;
-            
-            // Find which pile this card belongs to and its position in the stack
-            state.piles.forEach(function(pile, pileId) {
-                if (pile.cardStack && pile.cardStack.includes(card.id)) {
-                    stackPosition = pile.cardStack.indexOf(card.id);
-                    cardHeight = 0.5 + (stackPosition * 0.5); // much larger spacing to completely separate cards
+            var cardHeight = 0.5;
+            // Hide non-top blitz cards for all players
+            var ownerPlayer = gameState && gameState.players ? gameState.players.get(card.owner) : null;
+            if (ownerPlayer && ownerPlayer.blitzPile && ownerPlayer.blitzPile.includes(card.id)) {
+                const idx = ownerPlayer.blitzPile.indexOf(card.id);
+                const isTop = idx === ownerPlayer.blitzPile.length - 1;
+                cards[id].enabled = isTop; // only show top
+                if (isTop) {
+                    cards[id].setPosition(card.x, cardHeight, card.y);
                 }
-            });
-            
-            cards[id].setPosition(card.x, cardHeight, card.y);
+            } else {
+                // Non-blitz cards: keep simple small stacking for center dutch piles based on stack index
+                let adjustedHeight = cardHeight;
+                gameState.piles.forEach(function(pile) {
+                    if (pile.cardStack && pile.cardStack.includes(card.id)) {
+                        const stackIndex = pile.cardStack.indexOf(card.id);
+                        adjustedHeight = 0.5 + stackIndex * 0.05; // tight stack
+                    }
+                });
+                cards[id].enabled = true;
+                cards[id].setPosition(card.x, adjustedHeight, card.y);
+            }
         }
         console.log('Card position:', id, card.x, card.y, 'Value:', card.value, 'Color:', card.color, 'FaceUp:', card.faceUp);
     });
