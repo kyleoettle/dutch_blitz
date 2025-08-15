@@ -18,12 +18,11 @@ describe("testing your Colyseus app", () => {
     const client1 = await colyseus.connectTo(room);
     assert.strictEqual(client1.sessionId, room.clients[0].sessionId);
     await room.waitForNextPatch();
-    // Validate minimal expected structure
-    const state = client1.state as unknown as MyState;
-  // MapSchema exposes a .size property; rely on room.state to avoid proxy timing issues
-  assert.ok(room.state.players, "Players map should exist");
-  assert.strictEqual(room.state.players.size, 1, "One player should be present");
-    const p = state.players.get(client1.sessionId);
+  // Use authoritative room.state to avoid client proxy timing race
+  const state = room.state as MyState;
+  assert.ok(state.players, "Players map should exist");
+  assert.strictEqual(state.players.size, 1, "One player should be present");
+  const p = state.players.get(client1.sessionId);
     assert.ok(p, "Player state exists");
     assert.strictEqual(p.blitzPile.length, 10, "Blitz pile should have 10 cards");
     assert.strictEqual(p.dutchPile.length, 3, "Visible post (dutch) slots should have 3 cards initially");
