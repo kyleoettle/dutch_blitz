@@ -5,33 +5,234 @@ export class MyRoom extends Room<MyState> {
   maxClients = 8;
   state = new MyState();
 
+  // Dutch Blitz card generation functions
+  generatePlayerDeck(playerId: string): Card[] {
+    const deck: Card[] = [];
+    const colors = ["red", "green", "blue", "yellow"];
+    
+    colors.forEach(color => {
+      for (let value = 1; value <= 10; value++) {
+        const card = new Card();
+        card.id = `${playerId}_${color}_${value}`;
+        card.value = value;
+        card.color = color;
+        card.owner = playerId;
+        card.faceUp = false; // start face-down
+        deck.push(card);
+      }
+    });
+    
+    return this.shuffleDeck(deck);
+  }
+
+  shuffleDeck(deck: Card[]): Card[] {
+    const shuffled = [...deck];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }
+
+  distributePlayerCards(player: Player, playerId: string): void {
+    const deck = this.generatePlayerDeck(playerId);
+    
+    // Blitz Pile: 10 cards (face-down except top)
+    for (let i = 0; i < 10; i++) {
+      const card = deck[i];
+      card.faceUp = (i === 9); // only top card face-up
+      this.state.cards.set(card.id, card);
+      player.blitzPile.push(card.id);
+    }
+    
+    // Post Pile: 30 cards (face-down)
+    for (let i = 10; i < 40; i++) {
+      const card = deck[i];
+      card.faceUp = false;
+      this.state.cards.set(card.id, card);
+      player.postPile.push(card.id);
+    }
+    
+    // Dutch Pile: top 3 cards from Post Pile (face-up)
+    this.fillDutchPile(player);
+  }
+
+  fillDutchPile(player: Player): void {
+    // Move up to 3 cards from Post Pile to Dutch Pile
+    while (player.dutchPile.length < 3 && player.postPile.length > 0) {
+      const cardId = player.postPile.shift()!;
+      const card = this.state.cards.get(cardId);
+      if (card) {
+        card.faceUp = true; // make face-up in Dutch Pile
+        player.dutchPile.push(cardId);
+      }
+    }
+    
+    // If Post Pile is empty and Dutch Pile still needs cards, cycle completed Dutch cards
+    if (player.dutchPile.length < 3 && player.postPile.length === 0) {
+      this.cycleDutchPile(player);
+    }
+  }
+
+  cycleDutchPile(player: Player): void {
+    // When Post Pile is empty, take the bottom cards from Dutch Pile,
+    // flip them face-down, and add them back to Post Pile
+    if (player.dutchPile.length <= 1) return; // Keep at least 1 card visible
+    
+    // Take bottom cards (all except the top one) and move to Post Pile
+    const cardsToRecycle = player.dutchPile.splice(0, player.dutchPile.length - 1);
+    cardsToRecycle.reverse(); // reverse order for proper cycling
+    
+    cardsToRecycle.forEach(cardId => {
+      const card = this.state.cards.get(cardId);
+      if (card) {
+        card.faceUp = false; // flip face-down
+        player.postPile.push(cardId);
+      }
+    });
+    
+    // Now refill Dutch Pile from the newly populated Post Pile
+    this.fillDutchPile(player);
+  }
+
+  isValidSequenceMove(card: Card, targetPile: Pile): boolean {
+    // Empty pile can only accept value 1
+    if (targetPile.cardStack.length === 0) {
+      return card.value === 1;
+    }
+    
+    // Get top card of pile
+    const topCardId = targetPile.cardStack[targetPile.cardStack.length - 1];
+    const topCard = this.state.cards.get(topCardId);
+    if (!topCard) return false;
+    
+    // Must be next in sequence (n+1)
+    return card.value === topCard.value + 1;
+  }
+
+  checkWinCondition(player: Player): boolean {
+    return player.blitzPile.length === 0;
+  }
+
+  returnCardToPlayer(player: Player, card: Card): void {
+    // Return card to player's hand
+    card.pickedUp = true;
+    player.heldCard = card.id;
+    card.x = player.x;
+    card.y = player.y;
+  }
+
+  repositionDutchPile(player: Player, playerId: string): void {
+    // Reposition visible Dutch pile (3 cards) in a horizontal row left of the Blitz pile
+    const playerCount = Array.from(this.state.players.keys()).indexOf(playerId);
+    const angle = (playerCount * 2 * Math.PI) / 8;
+  const pileRadius = 20; // further increased for more clearance from central Dutch piles
+    // Blitz anchor (same as in positionPersonalPiles)
+  // Anchor further outward: base radial + extra outward push for separation
+  const outwardOffset = 4; // additional radial distance beyond pileRadius
+  const blitzX = Math.cos(angle) * (pileRadius + outwardOffset);
+  const blitzY = Math.sin(angle) * (pileRadius + outwardOffset);
+    const visibleSpacing = 3; // horizontal spacing between visible cards
+    // Right-most visible card is immediately left of Blitz pile
+    const rightMostX = blitzX - 2.6; // small gap from Blitz pile (card width ~2.4)
+    // Place cards from left to right (index 0 furthest left)
+    player.dutchPile.forEach((cardId, index) => {
+      const card = this.state.cards.get(cardId);
+      if (card) {
+        const offsetFromRight = (player.dutchPile.length - 1) - index; // 0 for right-most
+        card.x = rightMostX - offsetFromRight * visibleSpacing;
+        card.y = blitzY; // same row
+      }
+    });
+  }
+
+  completePile(pile: Pile): void {
+    console.log(`Pile ${pile.id} completed with value 10! Removing from play.`);
+    
+    // Remove all cards from the completed pile
+    pile.cardStack.forEach(cardId => {
+      this.state.cards.delete(cardId);
+    });
+    
+    // Reset pile
+    pile.cardStack = [];
+    pile.topCard = -1;
+  }
+
+  restartGame(): void {
+    console.log('Restarting game...');
+    
+    // Clear all existing cards
+    this.state.cards.clear();
+    
+    // Reset game state
+    this.state.gameStatus = "playing";
+    this.state.winner = "";
+    
+    // Reset and redistribute cards for all players
+    this.state.players.forEach((player, playerId) => {
+      // Clear personal piles
+      player.blitzPile = [];
+      player.postPile = [];
+      player.dutchPile = [];
+      player.heldCard = "";
+      player.score = 0;
+      
+      // Redistribute new cards
+      this.distributePlayerCards(player, playerId);
+      this.positionPersonalPiles(player, playerId, this.getPlayerAngle(playerId));
+    });
+    
+    // Reset Dutch Piles
+    this.state.piles.forEach((pile, pileId) => {
+      if (pile.type === "dutch") {
+        pile.cardStack = [];
+        pile.topCard = -1;
+      }
+    });
+    
+    console.log('Game restarted successfully');
+  }
+
+  getPlayerAngle(playerId: string): number {
+    const playerIds = Array.from(this.state.players.keys());
+    const playerIndex = playerIds.indexOf(playerId);
+    return (playerIndex * 2 * Math.PI) / 8;
+  }
+
+  calculateFinalScores(): void {
+    this.state.players.forEach((player, playerId) => {
+      // Final score = cards placed on Dutch Piles (+1 each) - remaining Blitz cards (-2 each)
+      const blitzPenalty = player.blitzPile.length * 2;
+      const finalScore = player.score - blitzPenalty;
+      player.score = finalScore;
+      console.log(`Player ${playerId} final score: ${finalScore} (${player.score + blitzPenalty} placed - ${blitzPenalty} penalty)`);
+    });
+  }
+
   onCreate(options: any) {
     console.log('MyRoom created!');
-    console.log('Initial state:', this.state);
+    this.state.gameStatus = "waiting";
 
-    // Initialize sample piles
-    for (let i = 0; i < 4; i++) {
+    // Initialize shared Dutch Piles (building piles)
+    // Previously: x positions were -6, -2, 2, 6 (spacing=4). This felt cramped visually
+    // with wider card models (2.4 width). We widen spacing for clearer separation.
+    const sharedDutchPileCount = 4;
+  const dutchPileSpacing = 5; // was 6 (wide). Closer spacing for more player area -> centers: -7.5, -2.5, 2.5, 7.5
+    // Center the row around 0 so layout remains balanced if count changes.
+    const dutchStartX = -((sharedDutchPileCount - 1) / 2) * dutchPileSpacing; // e.g. -9
+    for (let i = 0; i < sharedDutchPileCount; i++) {
       const pile = new Pile();
-      pile.id = `pile${i}`;
-      pile.x = -6 + i * 4;
+      pile.id = `dutch_pile_${i}`;
+      pile.x = dutchStartX + i * dutchPileSpacing;
       pile.y = 0;
+      pile.type = "dutch";
       pile.topCard = -1;
       pile.cardStack = [];
       this.state.piles.set(pile.id, pile);
     }
 
-    // Initialize sample cards with values and colors
-    const colors = ["red", "green", "blue", "yellow"];
-    for (let i = 0; i < 8; i++) {
-      const card = new Card();
-      card.id = `card${i}`;
-      card.x = -6 + i * 2;
-      card.y = 4;
-      card.pickedUp = false;
-      card.value = (i % 13) + 1; // Values 1-13
-      card.color = colors[i % 4]; // Cycle through colors
-      this.state.cards.set(card.id, card);
-    }
+    console.log('Dutch Piles initialized, waiting for players...');
 
     this.onMessage("move", (client, message) => {
       // Handle player movement
@@ -42,73 +243,232 @@ export class MyRoom extends Room<MyState> {
       }
     });
     this.onMessage("pickup", (client, message) => {
-  // Handle card pickup
-  const player = this.state.players.get(client.sessionId);
-  if (!player || player.heldCard) {
-    console.log('Pickup ignored: player not found or already holding a card');
-    return;
-  }
-  const card = this.state.cards.get(message.cardId);
-  if (!card || card.pickedUp) {
-    console.log('Pickup ignored: card not found or already picked up');
-    return;
-  }
-  card.pickedUp = true;
-  player.heldCard = card.id;
-  // Move card to player position, but do NOT change player position
-  card.x = player.x;
-  card.y = player.y;
-  console.log(`Player ${client.sessionId} picked up card ${card.id}. player.heldCard now:`, player.heldCard);
-    });
-    this.onMessage("drop", (client, message) => {
-  console.log('Drop message received:', message);
-  const player = this.state.players.get(client.sessionId);
-  if (!player || !player.heldCard) {
-    console.log('Drop ignored: player not holding a card');
-    return;
-  }
-  const card = this.state.cards.get(player.heldCard);
-  if (!card) {
-    console.log('Drop ignored: card not found');
-    return;
-  }
-  card.pickedUp = false;
-  player.heldCard = "";
-  // Do NOT change player.x/y here
-  if (message.pileId) {
-    const pile = this.state.piles.get(message.pileId);
-    if (pile) {
-      // Extract card index from id (e.g., 'card3' -> 3)
-      const cardIndex = parseInt(card.id.replace('card', ''), 10);
-      pile.topCard = isNaN(cardIndex) ? -1 : cardIndex;
-      // Add card to pile stack
-      pile.cardStack.push(card.id);
-      // Position card on pile with better stacking visual
-      const stackPosition = pile.cardStack.length - 1;
-      const stackOffset = stackPosition * 0.1; // slight horizontal offset
-      card.x = pile.x + stackOffset; // X position with fanning
-      card.y = pile.y; // Z position (same as pile)
-      // We'll handle height in client based on stack position
-      console.log(`Player ${client.sessionId} dropped card ${card.id} onto pile ${pile.id}. Stack size: ${pile.cardStack.length}, Position: ${stackPosition}`);
-    } else {
-      console.log('Drop pileId provided but pile not found:', message.pileId);
-      // Return card to player if pile not found
+      // Handle card pickup with Dutch Blitz rules
+      const player = this.state.players.get(client.sessionId);
+      if (!player || player.heldCard || this.state.gameStatus !== "playing") {
+        console.log('Pickup ignored: invalid player state or game not playing');
+        return;
+      }
+      
+      const card = this.state.cards.get(message.cardId);
+      if (!card || card.pickedUp || card.owner !== client.sessionId) {
+        console.log('Pickup ignored: invalid card or not owned by player');
+        return;
+      }
+      
+      // Prevent conflicts: check if another player is already holding this card
+      let cardAlreadyHeld = false;
+      this.state.players.forEach((otherPlayer, otherId) => {
+        if (otherId !== client.sessionId && otherPlayer.heldCard === card.id) {
+          cardAlreadyHeld = true;
+        }
+      });
+      
+      if (cardAlreadyHeld) {
+        console.log('Pickup ignored: card is being held by another player');
+        return;
+      }
+      
+      // Check if card is from valid source (top of Blitz or Dutch pile)
+      const isTopOfBlitz = player.blitzPile.length > 0 && player.blitzPile[player.blitzPile.length - 1] === card.id;
+      const isTopOfDutch = player.dutchPile.length > 0 && player.dutchPile[player.dutchPile.length - 1] === card.id;
+      
+      if (!isTopOfBlitz && !isTopOfDutch) {
+        console.log('Pickup ignored: card not from top of valid pile');
+        return;
+      }
+      
+      // Valid pickup
       card.pickedUp = true;
       player.heldCard = card.id;
-    }
-  } else {
-    // Reject ground drops - return card to player
-    console.log(`Ground drop rejected for player ${client.sessionId}. Card ${card.id} returned to player.`);
-    card.pickedUp = true;
-    player.heldCard = card.id;
-  }
+      card.x = player.x;
+      card.y = player.y;
+      
+      // Remove from source pile
+      if (isTopOfBlitz) {
+        player.blitzPile.pop();
+        // Reveal next Blitz card if any
+        if (player.blitzPile.length > 0) {
+          const nextCardId = player.blitzPile[player.blitzPile.length - 1];
+          const nextCard = this.state.cards.get(nextCardId);
+          if (nextCard) nextCard.faceUp = true;
+        }
+      } else if (isTopOfDutch) {
+        player.dutchPile.pop();
+        // Refill Dutch pile from Post pile
+        this.fillDutchPile(player);
+        // Reposition remaining Dutch cards
+        this.repositionDutchPile(player, client.sessionId);
+      }
+      
+      console.log(`Player ${client.sessionId} picked up card ${card.id} from ${isTopOfBlitz ? 'Blitz' : 'Dutch'} pile`);
+    });
+    this.onMessage("drop", (client, message) => {
+      console.log('Drop message received:', message);
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.heldCard || this.state.gameStatus !== "playing") {
+        console.log('Drop ignored: invalid player state or game not playing');
+        return;
+      }
+      
+      const card = this.state.cards.get(player.heldCard);
+      if (!card) {
+        console.log('Drop ignored: held card not found');
+        return;
+      }
+      
+      // Must drop on a Dutch Pile (shared building piles)
+      if (!message.pileId || !message.pileId.startsWith('dutch_pile_')) {
+        console.log('Drop rejected: must drop on Dutch Pile only');
+        this.returnCardToPlayer(player, card);
+        return;
+      }
+      
+      const pile = this.state.piles.get(message.pileId);
+      if (!pile) {
+        console.log('Drop ignored: pile not found');
+        this.returnCardToPlayer(player, card);
+        return;
+      }
+      
+      // Validate sequence move
+      if (!this.isValidSequenceMove(card, pile)) {
+        console.log(`Drop rejected: invalid sequence. Card ${card.value} cannot be placed on pile with ${pile.cardStack.length > 0 ? this.state.cards.get(pile.cardStack[pile.cardStack.length - 1])?.value : 'empty'} cards`);
+        this.returnCardToPlayer(player, card);
+        return;
+      }
+      
+      // Valid drop
+      card.pickedUp = false;
+      player.heldCard = "";
+      
+      // Add to pile
+      pile.cardStack.push(card.id);
+      const stackPosition = pile.cardStack.length - 1;
+      const stackOffset = stackPosition * 0.1;
+      card.x = pile.x + stackOffset;
+      card.y = pile.y;
+      
+      // Update player score (+1 for each card placed on Dutch Pile)
+      player.score += 1;
+      
+      console.log(`Player ${client.sessionId} successfully placed card ${card.id} (${card.color} ${card.value}) on ${pile.id}. Score: ${player.score}`);
+      
+      // Check for pile completion (value 10)
+      if (card.value === 10) {
+        this.completePile(pile);
+      }
+      
+      // Check win condition
+      if (this.checkWinCondition(player)) {
+        this.state.gameStatus = "finished";
+        this.state.winner = client.sessionId;
+        
+        // Calculate final scores for all players
+        this.calculateFinalScores();
+        
+        console.log(`Player ${client.sessionId} wins!`);
+        this.broadcast("gameWon", { winner: client.sessionId });
+      }
+    });
+
+    this.onMessage("cycle", (client, message) => {
+      // Handle manual Dutch Pile cycling (click on Post Pile)
+      const player = this.state.players.get(client.sessionId);
+      if (!player || this.state.gameStatus !== "playing") {
+        console.log('Cycle ignored: invalid player state or game not playing');
+        return;
+      }
+      
+      // Only allow cycling if Post Pile has cards or Dutch Pile has more than 1 card
+      if (player.postPile.length > 0 || player.dutchPile.length > 1) {
+        this.cycleDutchPile(player);
+        this.repositionDutchPile(player, client.sessionId);
+        console.log(`Player ${client.sessionId} cycled Dutch Pile. Post: ${player.postPile.length}, Dutch: ${player.dutchPile.length}`);
+      }
+    });
+
+    this.onMessage("restart", (client, message) => {
+      // Handle game restart (only if game is finished)
+      if (this.state.gameStatus === "finished") {
+        this.restartGame();
+        console.log('Game restarted by player:', client.sessionId);
+      }
     });
   }
 
   onJoin(client: Client, options: any) {
     console.log('Player joined MyRoom:', client.sessionId);
-    this.state.players.set(client.sessionId, new Player());
-    console.log('Current state:', this.state);
+    
+    const player = new Player();
+    
+    // Position players around the shared Dutch Piles
+    const playerCount = this.state.players.size;
+    const angle = (playerCount * 2 * Math.PI) / 8; // distribute up to 8 players in circle
+    const radius = 15; // Increased radius to fit on larger board
+    player.x = Math.cos(angle) * radius;
+    player.y = Math.sin(angle) * radius;
+    
+    this.state.players.set(client.sessionId, player);
+    
+    // Distribute cards to the new player
+    this.distributePlayerCards(player, client.sessionId);
+    
+    // Position player's personal piles
+    this.positionPersonalPiles(player, client.sessionId, angle);
+    
+    console.log(`Player ${client.sessionId} cards distributed. Blitz: ${player.blitzPile.length}, Post: ${player.postPile.length}, Dutch: ${player.dutchPile.length}`);
+    
+    // Start game if we have enough players (2+)
+    if (this.state.players.size >= 2 && this.state.gameStatus === "waiting") {
+      this.state.gameStatus = "playing";
+      console.log("Game started! Players:", this.state.players.size);
+    }
+  }
+
+  positionPersonalPiles(player: Player, playerId: string, playerAngle: number): void {
+  const pileRadius = 20; // match updated radius
+  const outwardOffset = 4; // keep consistent with repositionDutchPile
+  const blitzX = Math.cos(playerAngle) * (pileRadius + outwardOffset);
+  const blitzY = Math.sin(playerAngle) * (pileRadius + outwardOffset);
+    const visibleSpacing = 3; // spacing between the 3 visible ("post") cards
+
+    // Layout overview (top-down):
+    // [Post Card 1] [Post Card 2] [Post Card 3] [gap] [Blitz Stack]
+    //                   [Wood / Draw Stack] (below centered under the 3 cards)
+
+    // Blitz pile (stacked vertically in y axis)
+    player.blitzPile.forEach((cardId, index) => {
+      const card = this.state.cards.get(cardId);
+      if (card) {
+        card.x = blitzX;
+        card.y = blitzY + 0.1 * index; // stack height
+      }
+    });
+
+    // Right-most visible card positioned left of Blitz with small gap
+    const rightMostX = blitzX - 2.6; // card width (2.4) + 0.2 gap
+    // Determine starting (left-most) x
+    const leftMostX = rightMostX - visibleSpacing * (Math.max(player.dutchPile.length, 3) - 1);
+    // Position visible row left-to-right
+    player.dutchPile.forEach((cardId, index) => {
+      const card = this.state.cards.get(cardId);
+      if (card) {
+        card.x = leftMostX + index * visibleSpacing;
+        card.y = blitzY;
+      }
+    });
+
+    // Wood / draw pile (postPile) centered under visible row
+    const rowCenterX = (leftMostX + rightMostX) / 2;
+  const woodOffsetY = 4; // moved further below for clearer separation from visible row
+    player.postPile.forEach((cardId, index) => {
+      const card = this.state.cards.get(cardId);
+      if (card) {
+        card.x = rowCenterX;
+        card.y = blitzY + woodOffsetY + 0.05 * index; // stack slightly upward for visibility
+      }
+    });
   }
 
   onLeave(client: Client, consented: boolean) {

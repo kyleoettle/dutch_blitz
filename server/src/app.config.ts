@@ -1,6 +1,10 @@
 import config from "@colyseus/tools";
 import { monitor } from "@colyseus/monitor";
 import { playground } from "@colyseus/playground";
+import { Encoder } from "@colyseus/schema";
+
+// Increase buffer size to handle large game states
+Encoder.BUFFER_SIZE = 16 * 1024; // 16 KB (as suggested in the error message)
 
 /**
  * Import your Room files

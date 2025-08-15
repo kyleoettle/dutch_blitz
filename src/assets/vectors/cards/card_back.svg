@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 330" width="240" height="330" shape-rendering="geometricPrecision">
+  <defs>
+    <linearGradient id="back_grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e1e26" />
+      <stop offset="100%" stop-color="#303044" />
+    </linearGradient>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect x="0" y="0" width="20" height="20" fill="none" stroke="#555" stroke-width="2" />
+    </pattern>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="rgba(0,0,0,0.35)" />
+    </filter>
+  </defs>
+  <rect x="4" y="4" rx="24" ry="24" width="232" height="322" fill="url(#back_grad)" stroke="#888" stroke-width="10" filter="url(#shadow)" />
+  <rect x="24" y="24" rx="14" ry="14" width="192" height="282" fill="url(#grid)" stroke="rgba(255,255,255,0.08)" stroke-width="4" />
+  <text x="50%" y="50%" font-family="Arial, sans-serif" font-size="72" font-weight="800" fill="#e0e0e0" text-anchor="middle" dominant-baseline="central" letter-spacing="4">DB</text>
+</svg>
