@@ -75,7 +75,7 @@ Create a 3D multiplayer game inspired by Dutch Blitz and Fall Guys, playable in 
   - [ ] Arc trajectory when moving between piles
   - [ ] Gentle floating/bobbing when held by player
   - [ ] Stack settling animation when cards are placed
-  - [ ] Shuffle animation for Post Pile cycling
+  - [ ] Shuffle animation for Post Pile cycling (refilling from Wood pile)
 
 - [ ] **Pile Animations**
   - [ ] Highlight glow when valid drop target
@@ -199,7 +199,7 @@ Switched to internal SVG pipeline first for speed; AI / illustrative polish come
 |------|-----------|
 | Core prototype & multiplayer | ✅ |
 | Central Dutch pile spacing revision | ✅ (dynamic spacing constant) |
-| Personal pile layout (3 visible + blitz + wood below) | ✅ |
+| Personal pile layout (Post pile 3 visible + Blitz + Wood below) | ✅ |
 | Separation from Dutch piles (radius + outward offset) | ✅ |
 | Board/table size increase | ✅ (70×70 ground, camera offset) |
 | Vector card asset pipeline | ✅ (script + SVG integration with fallback) |

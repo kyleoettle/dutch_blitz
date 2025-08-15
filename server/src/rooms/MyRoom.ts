@@ -5,6 +5,28 @@ export class MyRoom extends Room<MyState> {
   maxClients = 8;
   state = new MyState();
 
+  // Proximity thresholds (squared distances for efficiency)
+  private readonly DUTCH_DROP_RADIUS = 2.0; // units
+  private readonly POST_PLACE_RADIUS = 2.0; // units
+
+  private getVisibleSlotPositions(playerId: string, player: Player): { x: number; y: number }[] {
+    // Mirrors logic in repositionDutchPile / positionPersonalPiles without mutating state
+    const playerIndex = Array.from(this.state.players.keys()).indexOf(playerId);
+    const angle = (playerIndex * 2 * Math.PI) / 8;
+    const pileRadius = 20;
+    const outwardOffset = 4;
+    const blitzX = Math.cos(angle) * (pileRadius + outwardOffset);
+    const blitzY = Math.sin(angle) * (pileRadius + outwardOffset);
+    const visibleSpacing = 3;
+    const rightMostX = blitzX - 2.6;
+    const leftMostX = rightMostX - visibleSpacing * 2; // 3 slots always
+    const slots: { x: number; y: number }[] = [];
+    for (let slot = 0; slot < 3; slot++) {
+      slots.push({ x: leftMostX + slot * visibleSpacing, y: blitzY });
+    }
+    return slots;
+  }
+
   // Dutch Blitz card generation functions
   generatePlayerDeck(playerId: string): Card[] {
     const deck: Card[] = [];
@@ -117,46 +139,66 @@ export class MyRoom extends Room<MyState> {
   }
 
   returnCardToPlayer(player: Player, card: Card): void {
-    // Return card to player's hand
-    card.pickedUp = true;
-    player.heldCard = card.id;
-    card.x = player.x;
-    card.y = player.y;
-    // If card came from visible dutch row (tracked) and space is still free, put it back into its original slot
-    if (player.heldFromVisibleIndex !== -1) {
-      // Restore card into placeholder slot (if slot exists) else push via fallback
+    // Unified restore logic based on original source
+    card.pickedUp = false;
+
+    if (player.heldOriginSource === 'postSlot' && player.heldFromVisibleIndex !== -1) {
+      // Restore into original visible slot (ensure slot array length)
       const idx = player.heldFromVisibleIndex;
-      if (idx >= 0 && idx < player.dutchPile.length) {
+      while (player.dutchPile.length < 3) player.dutchPile.push("");
+      if (idx >= 0 && idx < 3) {
         if (player.dutchPile[idx] === "") {
           player.dutchPile[idx] = card.id;
         } else if (!player.dutchPile.includes(card.id)) {
-          player.dutchPile.splice(idx, 0, card.id);
+          player.dutchPile[idx] = card.id; // force overwrite to avoid duplication
         }
       } else if (!player.dutchPile.includes(card.id)) {
-        player.dutchPile.push(card.id);
+        // Fallback: put into first empty or push
+        const emptyIdx = player.dutchPile.indexOf("");
+        if (emptyIdx !== -1) player.dutchPile[emptyIdx] = card.id; else player.dutchPile.push(card.id);
       }
       this.repositionDutchPile(player, card.owner);
-      player.heldFromVisibleIndex = -1; // reset
+    } else if (player.heldOriginSource === 'blitz') {
+      // Return to top of blitz pile (face-up)
+      player.blitzPile.push(card.id);
+      card.faceUp = true;
+      this.positionPersonalPiles(player, card.owner, this.getPlayerAngle(card.owner));
+    } else if (player.heldOriginSource === 'wood') {
+      // Return to top of wood (postPile). Wood pile cards are face-down.
+      player.postPile.push(card.id);
+      card.faceUp = false;
+      this.positionPersonalPiles(player, card.owner, this.getPlayerAngle(card.owner));
+    } else {
+      // Unknown origin fallback: treat like blitz to avoid losing card
+      player.blitzPile.push(card.id);
+      card.faceUp = true;
+      this.positionPersonalPiles(player, card.owner, this.getPlayerAngle(card.owner));
     }
+
+    // Clear held state
+    player.heldCard = "";
+    player.heldFromVisibleIndex = -1;
+    player.heldOriginSource = "";
+    player.heldOriginX = 0;
+    player.heldOriginY = 0;
   }
 
   // Fill placeholder slots ("" entries) in visible dutch row after a successful placement
   fillDutchPlaceholders(player: Player): void {
-    for (let i = 0; i < player.dutchPile.length; i++) {
+    // AUTO-FILL DISABLED per new rules: visible Post (dutchPile) slots are only filled
+    // when player stands on Wood pile indicator and presses R (drawWood action),
+    // or manually moves a Blitz card into an empty slot. Keeping function for backward
+    // compatibility but it now does nothing.
+  }
+
+  drawFromWood(player: Player): void {
+    // Fill empty (placeholder "") slots from wood (postPile) up to 3 visible
+    for (let i = 0; i < 3; i++) {
       if (player.dutchPile[i] === "" && player.postPile.length > 0) {
         const cardId = player.postPile.shift()!;
         const card = this.state.cards.get(cardId);
-        if (card) {
-          card.faceUp = true;
-          player.dutchPile[i] = cardId;
-        }
+        if (card) { card.faceUp = true; player.dutchPile[i] = cardId; }
       }
-    }
-    // If fewer than 3 slots exist (initial state), backfill new slots
-    while (player.dutchPile.length < 3 && player.postPile.length > 0) {
-      const cardId = player.postPile.shift()!;
-      const card = this.state.cards.get(cardId);
-      if (card) { card.faceUp = true; player.dutchPile.push(cardId); }
     }
   }
 
@@ -309,16 +351,17 @@ export class MyRoom extends Room<MyState> {
         return;
       }
       
-      // Valid sources: top of Blitz or ANY visible Dutch row card
-      const isTopOfBlitz = player.blitzPile.length > 0 && player.blitzPile[player.blitzPile.length - 1] === card.id;
-      const isVisibleDutch = player.dutchPile.includes(card.id);
+  // Valid sources: top of Blitz, ANY visible Post slot card (dutchPile array), or top Wood (postPile) card
+  const isTopOfBlitz = player.blitzPile.length > 0 && player.blitzPile[player.blitzPile.length - 1] === card.id;
+  const isVisiblePost = player.dutchPile.includes(card.id);
+  const isTopOfWood = player.postPile.length > 0 && player.postPile[player.postPile.length - 1] === card.id; // top wood is last (stacked)
       // If card is in blitz pile but not top, reject explicitly (defensive against client hover picking deeper cards)
       if (!isTopOfBlitz && player.blitzPile.includes(card.id)) {
         console.log('Pickup rejected: only top Blitz card may be picked');
         return;
       }
-      if (!isTopOfBlitz && !isVisibleDutch) {
-        console.log('Pickup ignored: card not from a valid personal pile (blitz top or visible dutch row)');
+      if (!isTopOfBlitz && !isVisiblePost && !isTopOfWood) {
+        console.log('Pickup ignored: card not from a valid personal pile (blitz top, visible post slot, or top wood)');
         return;
       }
       
@@ -340,7 +383,8 @@ export class MyRoom extends Room<MyState> {
           const nextCard = this.state.cards.get(nextCardId);
           if (nextCard) nextCard.faceUp = true;
         }
-      } else if (isVisibleDutch) {
+        player.heldOriginSource = 'blitz';
+      } else if (isVisiblePost) {
         // Remove specific card from visible row but keep slot placeholder
         const idx = player.dutchPile.indexOf(card.id);
         if (idx !== -1) {
@@ -348,6 +392,12 @@ export class MyRoom extends Room<MyState> {
           player.heldFromVisibleIndex = idx;
         }
         this.repositionDutchPile(player, client.sessionId);
+        player.heldOriginSource = 'postSlot';
+      } else if (isTopOfWood) {
+        // Remove from wood (postPile) top
+        player.postPile.pop();
+        card.faceUp = true;
+        player.heldOriginSource = 'wood';
       }
       
       console.log(`Player ${client.sessionId} picked up card ${card.id} from ${isTopOfBlitz ? 'Blitz top' : 'visible Dutch row'}`);
@@ -366,33 +416,38 @@ export class MyRoom extends Room<MyState> {
         return;
       }
       
-      // Must drop on a Dutch Pile (shared building piles)
+      // If targeting a Dutch pile (shared) follow sequence rules; else ignore (keep holding)
       if (!message.pileId || !message.pileId.startsWith('dutch_pile_')) {
-        console.log('Drop rejected: must drop on Dutch Pile only');
-        this.returnCardToPlayer(player, card);
-        return;
+        console.log('Drop ignored: no valid dutch_pile_ id specified; still holding card.');
+        return; // do NOT return card; player keeps holding
       }
       
       const pile = this.state.piles.get(message.pileId);
       if (!pile) {
         console.log('Drop ignored: pile not found');
-        this.returnCardToPlayer(player, card);
+        return;
+      }
+
+      // Proximity gating: require player near target pile center
+      const dxPile = player.x - pile.x;
+      const dyPile = player.y - pile.y;
+      const distSqPile = dxPile * dxPile + dyPile * dyPile;
+      if (distSqPile > this.DUTCH_DROP_RADIUS * this.DUTCH_DROP_RADIUS) {
+        console.log(`Drop ignored: too far from target pile (${Math.sqrt(distSqPile).toFixed(2)} > ${this.DUTCH_DROP_RADIUS}). Still holding.`);
         return;
       }
       
       // Validate sequence + color move
-  if (!this.isValidSequenceMove(card, pile)) {
-        console.log(`Drop rejected: invalid sequence/color. Card ${card.color} ${card.value} cannot be placed on pile with ${pile.cardStack.length > 0 ? this.state.cards.get(pile.cardStack[pile.cardStack.length - 1])?.value : 'empty'} cards (pile color: ${pile.color || 'unset'})`);
-        this.returnCardToPlayer(player, card);
-        return;
+      if (!this.isValidSequenceMove(card, pile)) {
+        console.log(`Drop rejected (rules): invalid sequence/color. Card ${card.color} ${card.value} cannot be placed. Still holding.`);
+        return; // keep holding for another attempt
       }
       
       // Valid drop
       card.pickedUp = false;
       player.heldCard = "";
-      // If card came from visible dutch row, now that drop is successful we can refill slot
+      // If card came from visible row, leave its slot empty (manual refills now)
       if (player.heldFromVisibleIndex !== -1) {
-        this.fillDutchPlaceholders(player); // fill only the placeholder slots
         this.repositionDutchPile(player, client.sessionId);
         player.heldFromVisibleIndex = -1;
       }
@@ -446,32 +501,8 @@ export class MyRoom extends Room<MyState> {
         console.log(`Cancel ignored: player too far from pickup origin (${Math.sqrt(distSq).toFixed(2)} > 1.5)`);
         return; // keep holding card
       }
-      card.pickedUp = false;
-      // Visible dutch slot restore
-      if (player.heldFromVisibleIndex !== -1) {
-        const idx = player.heldFromVisibleIndex;
-        if (idx >= 0) {
-          // ensure array has 3 slots
-          while (player.dutchPile.length < 3) player.dutchPile.push("");
-          if (player.dutchPile[idx] === "") {
-            player.dutchPile[idx] = card.id;
-          } else if (!player.dutchPile.includes(card.id)) {
-            // fallback insert
-            player.dutchPile.splice(idx, 0, card.id);
-          }
-        }
-        player.heldFromVisibleIndex = -1;
-        this.repositionDutchPile(player, client.sessionId);
-      } else {
-        // Assume blitz origin
-        player.blitzPile.push(card.id);
-        card.faceUp = true;
-        this.positionPersonalPiles(player, client.sessionId, this.getPlayerAngle(client.sessionId));
-      }
-      player.heldCard = "";
-  player.heldOriginX = 0;
-  player.heldOriginY = 0;
-      console.log(`Player ${client.sessionId} canceled pickup; card ${card.id} restored.`);
+  this.returnCardToPlayer(player, card);
+  console.log(`Player ${client.sessionId} canceled pickup; card ${card.id} restored (origin: ${player.heldOriginSource}).`);
     });
 
     this.onMessage("cycle", (client, message) => {
@@ -488,6 +519,58 @@ export class MyRoom extends Room<MyState> {
         this.repositionDutchPile(player, client.sessionId);
         console.log(`Player ${client.sessionId} cycled Dutch Pile. Post: ${player.postPile.length}, Dutch: ${player.dutchPile.length}`);
       }
+    });
+
+    // New: draw from wood pile into empty visible Post slots (R near wood pile indicator)
+    this.onMessage("drawWood", (client, message) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || this.state.gameStatus !== "playing") return;
+      // Require at least one empty slot and at least one wood card
+      if (!player.dutchPile.includes("") || player.postPile.length === 0) {
+        console.log(`drawWood ignored: no empty slot or no wood cards. Slots: ${player.dutchPile}, wood: ${player.postPile.length}`);
+        return;
+      }
+      this.drawFromWood(player);
+      this.repositionDutchPile(player, client.sessionId);
+      console.log(`Player ${client.sessionId} drew from wood. Wood remaining: ${player.postPile.length}`);
+    });
+
+    // New: place held Blitz card into first empty visible Post slot
+    this.onMessage("placePost", (client, message) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.heldCard || this.state.gameStatus !== "playing") return;
+      const card = this.state.cards.get(player.heldCard);
+      if (!card) return;
+      // Determine target slot (optional index supplied)
+      let targetSlot = typeof message?.slot === 'number' ? message.slot : player.dutchPile.indexOf("");
+      if (targetSlot < 0 || targetSlot > 2) {
+        console.log('placePost ignored: invalid slot index');
+        return;
+      }
+      // Ensure slot exists
+      while (player.dutchPile.length < 3) player.dutchPile.push("");
+      if (player.dutchPile[targetSlot] !== "") {
+        console.log('placePost ignored: slot not empty');
+        return;
+      }
+      // Proximity gating: verify player is near the target slot position
+      const slotPositions = this.getVisibleSlotPositions(client.sessionId, player);
+      const slotPos = slotPositions[targetSlot];
+      const dxSlot = player.x - slotPos.x;
+      const dySlot = player.y - slotPos.y;
+      const distSqSlot = dxSlot * dxSlot + dySlot * dySlot;
+      if (distSqSlot > this.POST_PLACE_RADIUS * this.POST_PLACE_RADIUS) {
+        console.log(`placePost ignored: too far from slot ${targetSlot} (${Math.sqrt(distSqSlot).toFixed(2)} > ${this.POST_PLACE_RADIUS}). Still holding.`);
+        return; // keep holding
+      }
+      // Place card regardless of origin (blitz, postSlot relocation, or wood)
+      player.dutchPile[targetSlot] = card.id;
+      card.pickedUp = false;
+      player.heldCard = "";
+      player.heldFromVisibleIndex = -1;
+      player.heldOriginSource = "";
+      this.repositionDutchPile(player, client.sessionId);
+      console.log(`Player ${client.sessionId} placed card ${card.id} into Post slot ${targetSlot}`);
     });
 
     this.onMessage("restart", (client, message) => {

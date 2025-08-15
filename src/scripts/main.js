@@ -142,9 +142,9 @@ window.addEventListener('keydown', function(e) {
         console.log('Q pressed. heldCardId:', heldCardId);
     }
     if (e.key.toLowerCase() === 'r' && window.room) {
-        // Cycle Dutch Pile (draw from Post Pile)
-        window.room.send('cycle', {});
-        console.log('Sent cycle message');
+        // Attempt draw from wood pile into empty Post (visible) slots
+        window.room.send('drawWood', {});
+        console.log('Sent drawWood message');
     }
     if (e.key.toLowerCase() === 't' && window.room) {
         // Try again / Restart game
@@ -178,6 +178,7 @@ window.addEventListener('keydown', function(e) {
             }
         }
     }
+    // If holding a Blitz card and pressing E again while over empty Post slot, place into slot
     // Drop card
     if (e.key.toLowerCase() === 'q' && heldCardId && window.room) {
         console.log('Drop / cancel key pressed. heldCardId:', heldCardId);
@@ -197,9 +198,10 @@ window.addEventListener('keydown', function(e) {
             window.room.send('drop', { cardId: heldCardId, x: localPos.x, y: localPos.y, pileId: nearestPileId });
             console.log('Sent drop message for card:', heldCardId, 'onto pile:', nearestPileId);
         } else {
-            // Cancel / return card
-            window.room.send('cancel', { cardId: heldCardId });
-            console.log('No pile nearby - canceling and returning card.');
+            // Determine nearest empty Post slot by checking local cached card positions (approx heuristic)
+            // (Simplified: send without slot so server chooses first empty)
+            window.room.send('placePost', { cardId: heldCardId });
+            console.log('No Dutch pile nearby - attempting placePost into first empty slot.');
         }
     }
 });
@@ -632,9 +634,9 @@ function updateGameUI(state) {
     if (state && state.gameStatus === 'playing') {
         html += '<h4>Controls:</h4>';
         html += '<p>WASD - Move around<br>';
-        html += 'E - Pick up card<br>';
-        html += 'Q - Drop card on pile<br>';
-        html += 'R - Cycle Dutch pile</p>';
+    html += 'E - Pick up card / place into Post slot / play to Dutch pile<br>';
+    html += 'Q - Drop card on Dutch pile (if valid) or cancel<br>';
+    html += 'R - Draw from Wood pile into empty Post slots</p>';
         
         html += '<h4>How to Play:</h4>';
         html += '<p>• Build sequences 1→10 on colored piles<br>';
@@ -647,9 +649,9 @@ function updateGameUI(state) {
             const player = state.players.get(localPlayerId);
             if (player) {
                 html += '<h4>Your Piles:</h4>';
-                html += '<p>Blitz: ' + (player.blitzPile ? player.blitzPile.length : 0) + ' cards<br>';
-                html += 'Post: ' + (player.postPile ? player.postPile.length : 0) + ' cards<br>';
-                html += 'Dutch: ' + (player.dutchPile ? player.dutchPile.length : 0) + ' cards visible<br>';
+                html += '<p>Blitz: ' + (player.blitzPile ? player.blitzPile.length : 0) + '<br>';
+                html += 'Wood: ' + (player.postPile ? player.postPile.length : 0) + '<br>';
+                html += 'Post Slots: ' + (player.dutchPile ? player.dutchPile.filter(c=>c!=="" && c!=null).length : 0) + '/3 filled<br>';
                 html += 'Score: ' + (player.score || 0) + '</p>';
                 
                 if (player.blitzPile && player.blitzPile.length === 0) {

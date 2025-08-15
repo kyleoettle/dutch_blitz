@@ -11,6 +11,7 @@ export class Player extends Schema {
   @type("number") heldFromVisibleIndex: number = -1; // index in dutchPile a card was picked from (for delayed refill)
   @type("number") heldOriginX: number = 0; // original pickup x (for proximity-based return)
   @type("number") heldOriginY: number = 0; // original pickup y
+  @type("string") heldOriginSource: string = ""; // 'blitz' | 'postSlot' | 'wood'
 }
 
 export class Card extends Schema {
