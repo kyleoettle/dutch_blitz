@@ -251,12 +251,22 @@ describe('MyRoom core behaviors', () => {
     const targetColor = Object.keys(colorGroups).find(k => colorGroups[k].length === 10) || Object.keys(colorGroups)[0];
     const ordered = colorGroups[targetColor].slice().sort((a,b)=>a.value-b.value);
     // Place first 9 directly
+    pile0.cardStack = [];
+    pile0.color = "";
     for (let i=0;i<9;i++) {
       const card = ordered[i];
       pile0.cardStack.push(card.id);
-      pile0.color = targetColor;
+      if (i === 0) pile0.color = targetColor; // set color only once
     }
     const topTen = ordered[9];
+    // Ensure the value 10 card is pickable: put it on top of blitz pile as last element
+    // Remove from any pile arrays
+    p1.blitzPile = p1.blitzPile.filter(id=>id!==topTen.id);
+    p1.postPile = p1.postPile.filter(id=>id!==topTen.id);
+    const visibleIdx = p1.dutchPile.indexOf(topTen.id);
+    if (visibleIdx !== -1) p1.dutchPile[visibleIdx] = "";
+    p1.blitzPile.push(topTen.id); // becomes top
+    topTen.faceUp = true;
     client1.send('pickup', { cardId: topTen.id });
     await waitNext(room);
     p1.x = pile0.x; p1.y = pile0.y; // ensure proximity

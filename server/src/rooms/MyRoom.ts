@@ -1,63 +1,34 @@
 import { Room, Client } from "colyseus";
 import { MyState, Player, Card, Pile } from "./schema/MyState";
+import { MAX_PLAYERS, SHARED_DUTCH_PILE_COUNT, DUTCH_PILE_SPACING, DUTCH_DROP_RADIUS, POST_PLACE_RADIUS } from "./constants";
+import { DeckRefillService } from "./services/deckRefillService";
+import { LayoutService } from "./services/layoutService";
+import { RuleService } from "./services/ruleService";
+import { ScoringService } from "./services/scoringService";
+import { RestoreProximityService } from "./services/restoreProximityService";
 
 export class MyRoom extends Room<MyState> {
-  maxClients = 8;
+  maxClients = MAX_PLAYERS;
   state = new MyState();
 
-  // Proximity thresholds (squared distances for efficiency)
-  private readonly DUTCH_DROP_RADIUS = 2.0; // units
-  private readonly POST_PLACE_RADIUS = 2.0; // units
+  // Services
+  private deckRefill!: DeckRefillService;
+  private layout!: LayoutService;
+  private rules!: RuleService;
+  private scoring!: ScoringService;
+  private restoreProx!: RestoreProximityService;
 
-  private getVisibleSlotPositions(playerId: string, player: Player): { x: number; y: number }[] {
-    // Mirrors logic in repositionDutchPile / positionPersonalPiles without mutating state
-    const playerIndex = Array.from(this.state.players.keys()).indexOf(playerId);
-    const angle = (playerIndex * 2 * Math.PI) / 8;
-    const pileRadius = 20;
-    const outwardOffset = 4;
-    const blitzX = Math.cos(angle) * (pileRadius + outwardOffset);
-    const blitzY = Math.sin(angle) * (pileRadius + outwardOffset);
-    const visibleSpacing = 3;
-    const rightMostX = blitzX - 2.6;
-    const leftMostX = rightMostX - visibleSpacing * 2; // 3 slots always
-    const slots: { x: number; y: number }[] = [];
-    for (let slot = 0; slot < 3; slot++) {
-      slots.push({ x: leftMostX + slot * visibleSpacing, y: blitzY });
-    }
-    return slots;
+  // Delegated helper for visible slot positions via layout service
+  private getVisibleSlotPositions(playerId: string, player: Player) {
+    return this.layout.computeVisibleSlotPositions(playerId, player);
   }
 
   // Dutch Blitz card generation functions
-  generatePlayerDeck(playerId: string): Card[] {
-    const deck: Card[] = [];
-    const colors = ["red", "green", "blue", "yellow"];
-    
-    colors.forEach(color => {
-      for (let value = 1; value <= 10; value++) {
-        const card = new Card();
-        card.id = `${playerId}_${color}_${value}`;
-        card.value = value;
-        card.color = color;
-        card.owner = playerId;
-        card.faceUp = false; // start face-down
-        deck.push(card);
-      }
-    });
-    
-    return this.shuffleDeck(deck);
-  }
-
-  shuffleDeck(deck: Card[]): Card[] {
-    const shuffled = [...deck];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  }
+  // Legacy deck generation now delegated (kept for backward compatibility if needed)
+  private generatePlayerDeck(playerId: string) { return this.deckRefill.generatePlayerDeck(playerId); }
 
   distributePlayerCards(player: Player, playerId: string): void {
-    const deck = this.generatePlayerDeck(playerId);
+  const deck = this.deckRefill.generatePlayerDeck(playerId);
     
     // Blitz Pile: 10 cards (face-down except top)
     for (let i = 0; i < 10; i++) {
@@ -76,112 +47,17 @@ export class MyRoom extends Room<MyState> {
     }
     
     // Dutch Pile: top 3 cards from Post Pile (face-up)
-    this.fillDutchPile(player);
+    this.deckRefill.fillDutchPile(player);
   }
 
-  fillDutchPile(player: Player): void {
-    // Move up to 3 cards from Post Pile to Dutch Pile
-    while (player.dutchPile.length < 3 && player.postPile.length > 0) {
-      const cardId = player.postPile.shift()!;
-      const card = this.state.cards.get(cardId);
-      if (card) {
-        card.faceUp = true; // make face-up in Dutch Pile
-        player.dutchPile.push(cardId);
-      }
-    }
-    
-    // If Post Pile is empty and Dutch Pile still needs cards, cycle completed Dutch cards
-    if (player.dutchPile.length < 3 && player.postPile.length === 0) {
-      this.cycleDutchPile(player);
-    }
-  }
+  // Removed fillDutchPile / cycleDutchPile (moved to deckRefill service)
 
-  cycleDutchPile(player: Player): void {
-    // When Post Pile is empty, take the bottom cards from Dutch Pile,
-    // flip them face-down, and add them back to Post Pile
-    if (player.dutchPile.length <= 1) return; // Keep at least 1 card visible
-    
-    // Take bottom cards (all except the top one) and move to Post Pile
-    const cardsToRecycle = player.dutchPile.splice(0, player.dutchPile.length - 1);
-    cardsToRecycle.reverse(); // reverse order for proper cycling
-    
-    cardsToRecycle.forEach(cardId => {
-      const card = this.state.cards.get(cardId);
-      if (card) {
-        card.faceUp = false; // flip face-down
-        player.postPile.push(cardId);
-      }
-    });
-    
-    // Now refill Dutch Pile from the newly populated Post Pile
-    this.fillDutchPile(player);
-  }
+  // Delegations
+  private isValidSequenceMove(card: Card, targetPile: Pile) { return this.rules.isValidSequenceMove(card, targetPile); }
+  private checkWinCondition(player: Player) { return this.rules.checkWinCondition(player); }
 
-  isValidSequenceMove(card: Card, targetPile: Pile): boolean {
-    // Empty pile can only accept value 1
-    if (targetPile.cardStack.length === 0) {
-      return card.value === 1; // first card establishes color
-    }
-    
-    // Get top card of pile
-    const topCardId = targetPile.cardStack[targetPile.cardStack.length - 1];
-    const topCard = this.state.cards.get(topCardId);
-    if (!topCard) return false;
-    
-    // Color must match pile color (pile.color set when first card placed)
-    if (targetPile.color && card.color !== targetPile.color) return false;
-    // Must be next in sequence (n+1)
-    return card.value === topCard.value + 1;
-  }
-
-  checkWinCondition(player: Player): boolean {
-    return player.blitzPile.length === 0;
-  }
-
-  returnCardToPlayer(player: Player, card: Card): void {
-    // Unified restore logic based on original source
-    card.pickedUp = false;
-
-    if (player.heldOriginSource === 'postSlot' && player.heldFromVisibleIndex !== -1) {
-      // Restore into original visible slot (ensure slot array length)
-      const idx = player.heldFromVisibleIndex;
-      while (player.dutchPile.length < 3) player.dutchPile.push("");
-      if (idx >= 0 && idx < 3) {
-        if (player.dutchPile[idx] === "") {
-          player.dutchPile[idx] = card.id;
-        } else if (!player.dutchPile.includes(card.id)) {
-          player.dutchPile[idx] = card.id; // force overwrite to avoid duplication
-        }
-      } else if (!player.dutchPile.includes(card.id)) {
-        // Fallback: put into first empty or push
-        const emptyIdx = player.dutchPile.indexOf("");
-        if (emptyIdx !== -1) player.dutchPile[emptyIdx] = card.id; else player.dutchPile.push(card.id);
-      }
-      this.repositionDutchPile(player, card.owner);
-    } else if (player.heldOriginSource === 'blitz') {
-      // Return to top of blitz pile (face-up)
-      player.blitzPile.push(card.id);
-      card.faceUp = true;
-      this.positionPersonalPiles(player, card.owner, this.getPlayerAngle(card.owner));
-    } else if (player.heldOriginSource === 'wood') {
-      // Return to top of wood (postPile). Wood pile cards are face-down.
-      player.postPile.push(card.id);
-      card.faceUp = false;
-      this.positionPersonalPiles(player, card.owner, this.getPlayerAngle(card.owner));
-    } else {
-      // Unknown origin fallback: treat like blitz to avoid losing card
-      player.blitzPile.push(card.id);
-      card.faceUp = true;
-      this.positionPersonalPiles(player, card.owner, this.getPlayerAngle(card.owner));
-    }
-
-    // Clear held state
-    player.heldCard = "";
-    player.heldFromVisibleIndex = -1;
-    player.heldOriginSource = "";
-    player.heldOriginX = 0;
-    player.heldOriginY = 0;
-  }
+  // Return delegated
+  private returnCardToPlayer(player: Player, card: Card) { this.restoreProx.returnCardToPlayer(player, card); }
 
   // Fill placeholder slots ("" entries) in visible dutch row after a successful placement
   fillDutchPlaceholders(player: Player): void {
@@ -191,55 +67,11 @@ export class MyRoom extends Room<MyState> {
     // compatibility but it now does nothing.
   }
 
-  drawFromWood(player: Player): void {
-    // Fill empty (placeholder "") slots from wood (postPile) up to 3 visible
-    for (let i = 0; i < 3; i++) {
-      if (player.dutchPile[i] === "" && player.postPile.length > 0) {
-        const cardId = player.postPile.shift()!;
-        const card = this.state.cards.get(cardId);
-        if (card) { card.faceUp = true; player.dutchPile[i] = cardId; }
-      }
-    }
-  }
+  private drawFromWood(player: Player) { this.deckRefill.drawFromWood(player); }
 
-  repositionDutchPile(player: Player, playerId: string): void {
-    // Reposition visible Dutch pile: maintain 3 fixed slot positions (indices 0..2) so remaining cards don't shift when one is picked up
-    const playerCount = Array.from(this.state.players.keys()).indexOf(playerId);
-    const angle = (playerCount * 2 * Math.PI) / 8;
-  const pileRadius = 20; // further increased for more clearance from central Dutch piles
-    // Blitz anchor (same as in positionPersonalPiles)
-  // Anchor further outward: base radial + extra outward push for separation
-  const outwardOffset = 4; // additional radial distance beyond pileRadius
-  const blitzX = Math.cos(angle) * (pileRadius + outwardOffset);
-  const blitzY = Math.sin(angle) * (pileRadius + outwardOffset);
-    const visibleSpacing = 3;
-    const rightMostX = blitzX - 2.6; // fixed anchor near blitz
-    const leftMostX = rightMostX - visibleSpacing * 2; // always 3 slots
-    for (let slot = 0; slot < 3; slot++) {
-      const cardId = player.dutchPile[slot];
-      if (cardId && cardId !== "") {
-        const card = this.state.cards.get(cardId);
-        if (card) {
-          card.x = leftMostX + slot * visibleSpacing;
-          card.y = blitzY;
-        }
-      }
-    }
-  }
+  private repositionDutchPile(player: Player, playerId: string) { this.layout.repositionVisibleSlots(player, playerId); }
 
-  completePile(pile: Pile): void {
-    console.log(`Pile ${pile.id} completed with value 10! Removing from play.`);
-    
-    // Remove all cards from the completed pile
-    pile.cardStack.forEach(cardId => {
-      this.state.cards.delete(cardId);
-    });
-    
-    // Reset pile
-    pile.cardStack = [];
-    pile.topCard = -1;
-  pile.color = ""; // allow new sequence
-  }
+  private completePile(pile: Pile) { this.scoring.completePile(pile); }
 
   restartGame(): void {
     console.log('Restarting game...');
@@ -262,7 +94,7 @@ export class MyRoom extends Room<MyState> {
       
       // Redistribute new cards
       this.distributePlayerCards(player, playerId);
-      this.positionPersonalPiles(player, playerId, this.getPlayerAngle(playerId));
+  this.layout.positionPersonalPiles(player, playerId, this.getPlayerAngle(playerId));
     });
     
     // Reset Dutch Piles
@@ -282,15 +114,7 @@ export class MyRoom extends Room<MyState> {
     return (playerIndex * 2 * Math.PI) / 8;
   }
 
-  calculateFinalScores(): void {
-    this.state.players.forEach((player, playerId) => {
-      // Final score = cards placed on Dutch Piles (+1 each) - remaining Blitz cards (-2 each)
-      const blitzPenalty = player.blitzPile.length * 2;
-      const finalScore = player.score - blitzPenalty;
-      player.score = finalScore;
-      console.log(`Player ${playerId} final score: ${finalScore} (${player.score + blitzPenalty} placed - ${blitzPenalty} penalty)`);
-    });
-  }
+  private calculateFinalScores() { this.scoring.calculateFinalScores(); }
 
   onCreate(options: any) {
     console.log('MyRoom created!');
@@ -299,11 +123,17 @@ export class MyRoom extends Room<MyState> {
     // Initialize shared Dutch Piles (building piles)
     // Previously: x positions were -6, -2, 2, 6 (spacing=4). This felt cramped visually
     // with wider card models (2.4 width). We widen spacing for clearer separation.
-    const sharedDutchPileCount = 4;
-  const dutchPileSpacing = 5; // was 6 (wide). Closer spacing for more player area -> centers: -7.5, -2.5, 2.5, 7.5
-    // Center the row around 0 so layout remains balanced if count changes.
-    const dutchStartX = -((sharedDutchPileCount - 1) / 2) * dutchPileSpacing; // e.g. -9
-    for (let i = 0; i < sharedDutchPileCount; i++) {
+  // Instantiate services now that state exists
+  this.deckRefill = new DeckRefillService(this.state);
+  this.rules = new RuleService(this.state);
+  this.layout = new LayoutService(this.state, (id) => this.getPlayerAngle(id));
+  this.scoring = new ScoringService(this.state);
+  this.restoreProx = new RestoreProximityService(this.state, (id)=>this.getPlayerAngle(id), (p, id)=>this.layout.repositionVisibleSlots(p, id), (p, id, angle)=>this.layout.positionPersonalPiles(p, id, angle));
+
+  const sharedDutchPileCount = SHARED_DUTCH_PILE_COUNT;
+  const dutchPileSpacing = DUTCH_PILE_SPACING;
+  const dutchStartX = -((sharedDutchPileCount - 1) / 2) * dutchPileSpacing;
+  for (let i = 0; i < sharedDutchPileCount; i++) {
       const pile = new Pile();
       pile.id = `dutch_pile_${i}`;
       pile.x = dutchStartX + i * dutchPileSpacing;
@@ -432,8 +262,8 @@ export class MyRoom extends Room<MyState> {
       const dxPile = player.x - pile.x;
       const dyPile = player.y - pile.y;
       const distSqPile = dxPile * dxPile + dyPile * dyPile;
-      if (distSqPile > this.DUTCH_DROP_RADIUS * this.DUTCH_DROP_RADIUS) {
-        console.log(`Drop ignored: too far from target pile (${Math.sqrt(distSqPile).toFixed(2)} > ${this.DUTCH_DROP_RADIUS}). Still holding.`);
+      if (distSqPile > DUTCH_DROP_RADIUS * DUTCH_DROP_RADIUS) {
+        console.log(`Drop ignored: too far from target pile (${Math.sqrt(distSqPile).toFixed(2)} > ${DUTCH_DROP_RADIUS}). Still holding.`);
         return;
       }
       
@@ -515,7 +345,7 @@ export class MyRoom extends Room<MyState> {
       
       // Only allow cycling if Post Pile has cards or Dutch Pile has more than 1 card
       if (player.postPile.length > 0 || player.dutchPile.length > 1) {
-        this.cycleDutchPile(player);
+  this.deckRefill.cycleDutchPile(player);
         this.repositionDutchPile(player, client.sessionId);
         console.log(`Player ${client.sessionId} cycled Dutch Pile. Post: ${player.postPile.length}, Dutch: ${player.dutchPile.length}`);
       }
@@ -559,8 +389,8 @@ export class MyRoom extends Room<MyState> {
       const dxSlot = player.x - slotPos.x;
       const dySlot = player.y - slotPos.y;
       const distSqSlot = dxSlot * dxSlot + dySlot * dySlot;
-      if (distSqSlot > this.POST_PLACE_RADIUS * this.POST_PLACE_RADIUS) {
-        console.log(`placePost ignored: too far from slot ${targetSlot} (${Math.sqrt(distSqSlot).toFixed(2)} > ${this.POST_PLACE_RADIUS}). Still holding.`);
+      if (distSqSlot > POST_PLACE_RADIUS * POST_PLACE_RADIUS) {
+        console.log(`placePost ignored: too far from slot ${targetSlot} (${Math.sqrt(distSqSlot).toFixed(2)} > ${POST_PLACE_RADIUS}). Still holding.`);
         return; // keep holding
       }
       // Place card regardless of origin (blitz, postSlot relocation, or wood)
@@ -597,10 +427,10 @@ export class MyRoom extends Room<MyState> {
     this.state.players.set(client.sessionId, player);
     
     // Distribute cards to the new player
-    this.distributePlayerCards(player, client.sessionId);
+  this.distributePlayerCards(player, client.sessionId);
     
     // Position player's personal piles
-    this.positionPersonalPiles(player, client.sessionId, angle);
+  this.layout.positionPersonalPiles(player, client.sessionId, angle);
     
     console.log(`Player ${client.sessionId} cards distributed. Blitz: ${player.blitzPile.length}, Post: ${player.postPile.length}, Dutch: ${player.dutchPile.length}`);
     
@@ -612,48 +442,7 @@ export class MyRoom extends Room<MyState> {
   }
 
   positionPersonalPiles(player: Player, playerId: string, playerAngle: number): void {
-  const pileRadius = 20; // match updated radius
-  const outwardOffset = 4; // keep consistent with repositionDutchPile
-  const blitzX = Math.cos(playerAngle) * (pileRadius + outwardOffset);
-  const blitzY = Math.sin(playerAngle) * (pileRadius + outwardOffset);
-    const visibleSpacing = 3; // spacing between the 3 visible ("post") cards
-
-    // Layout overview (top-down):
-    // [Post Card 1] [Post Card 2] [Post Card 3] [gap] [Blitz Stack]
-    //                   [Wood / Draw Stack] (below centered under the 3 cards)
-
-    // Blitz pile (stacked vertically in y axis)
-    player.blitzPile.forEach((cardId, index) => {
-      const card = this.state.cards.get(cardId);
-      if (card) {
-        card.x = blitzX;
-        card.y = blitzY + 0.1 * index; // stack height
-      }
-    });
-
-    // Right-most visible card positioned left of Blitz with small gap
-    const rightMostX = blitzX - 2.6; // card width (2.4) + 0.2 gap
-    // Determine starting (left-most) x
-    const leftMostX = rightMostX - visibleSpacing * (Math.max(player.dutchPile.length, 3) - 1);
-    // Position visible row left-to-right
-    player.dutchPile.forEach((cardId, index) => {
-      const card = this.state.cards.get(cardId);
-      if (card) {
-        card.x = leftMostX + index * visibleSpacing;
-        card.y = blitzY;
-      }
-    });
-
-    // Wood / draw pile (postPile) centered under visible row
-    const rowCenterX = (leftMostX + rightMostX) / 2;
-  const woodOffsetY = 4; // moved further below for clearer separation from visible row
-    player.postPile.forEach((cardId, index) => {
-      const card = this.state.cards.get(cardId);
-      if (card) {
-        card.x = rowCenterX;
-        card.y = blitzY + woodOffsetY + 0.05 * index; // stack slightly upward for visibility
-      }
-    });
+  this.layout.positionPersonalPiles(player, playerId, playerAngle);
   }
 
   onLeave(client: Client, consented: boolean) {
