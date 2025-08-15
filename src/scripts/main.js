@@ -253,32 +253,7 @@ function updateMovement(dt) {
             cards[heldCardId].setPosition(localPos.x, 2, localPos.y + 0.7); // above avatar
         }
 
-        // Automatic pickup of top visible dutch card if overlapping and not already holding one
-        if (!heldCardId && gameState && gameState.players && typeof gameState.players.get === 'function') {
-            const player = gameState.players.get(localPlayerId);
-            if (player && player.dutchPile && player.dutchPile.length > 0) {
-                const now = performance.now();
-                if (now - lastAutoPickupTime > autoPickupCooldown) {
-                    // Consider the right-most (last) card in dutchPile as the 'top'/primary auto-pick target
-                    const targetCardId = player.dutchPile[player.dutchPile.length - 1];
-                    const targetEntity = cards[targetCardId];
-                    if (targetEntity) {
-                        const pos = targetEntity.getPosition();
-                        const dx = localPos.x - pos.x;
-                        const dz = localPos.y - pos.z;
-                        const dist = Math.hypot(dx, dz);
-                        if (dist < 1.0) { // proximity threshold
-                            if (window.room) {
-                                window.room.send('pickup', { cardId: targetCardId });
-                                heldCardId = targetCardId;
-                                lastAutoPickupTime = now;
-                                console.log('Auto-picked visible dutch card', targetCardId);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    // (Disabled) Automatic pickup removed: require explicit 'E' key press to pick up cards.
         
         // Visual feedback: highlight nearby Dutch pile when holding a card (only if gameState exists)
         if (heldCardId && gameState && gameState.piles && piles) {
