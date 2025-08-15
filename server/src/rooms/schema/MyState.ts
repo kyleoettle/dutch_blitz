@@ -8,12 +8,13 @@ export class Player extends Schema {
   @type(["string"]) postPile: string[] = []; // 30 cards, face-down draw pile
   @type(["string"]) dutchPile: string[] = []; // up to 3 cards, face-up
   @type("number") score: number = 0; // for scoring system
+  @type("number") heldFromVisibleIndex: number = -1; // index in dutchPile a card was picked from (for delayed refill)
 }
 
 export class Card extends Schema {
   @type("string") id: string = "";
   @type("number") x: number = 0;
-  @type("number") y: number = 0;
+  @type("number") y: numbesdsr = 0;
   @type("boolean") pickedUp: boolean = false;
   @type("number") value: number = 1; // 1-10 for Dutch Blitz (not 1-13)
   @type("string") color: string = "red"; // red, green, blue, yellow
@@ -28,6 +29,7 @@ export class Pile extends Schema {
   @type("number") topCard: number = -1; // card index of top card
   @type(["string"]) cardStack: string[] = []; // array of card IDs in stack order
   @type("string") type: string = "dutch"; // "dutch", "blitz", "post", or "personal"
+  @type("string") color: string = ""; // color assigned when first card (value 1) placed; required for subsequent cards
 }
 
 export class MyState extends Schema {

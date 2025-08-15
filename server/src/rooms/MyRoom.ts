@@ -98,7 +98,7 @@ export class MyRoom extends Room<MyState> {
   isValidSequenceMove(card: Card, targetPile: Pile): boolean {
     // Empty pile can only accept value 1
     if (targetPile.cardStack.length === 0) {
-      return card.value === 1;
+      return card.value === 1; // first card establishes color
     }
     
     // Get top card of pile
@@ -106,6 +106,8 @@ export class MyRoom extends Room<MyState> {
     const topCard = this.state.cards.get(topCardId);
     if (!topCard) return false;
     
+    // Color must match pile color (pile.color set when first card placed)
+    if (targetPile.color && card.color !== targetPile.color) return false;
     // Must be next in sequence (n+1)
     return card.value === topCard.value + 1;
   }
@@ -120,6 +122,17 @@ export class MyRoom extends Room<MyState> {
     player.heldCard = card.id;
     card.x = player.x;
     card.y = player.y;
+    // If card came from visible dutch row (tracked) and space is still free, put it back into its original slot
+    if (player.heldFromVisibleIndex !== -1) {
+      // Avoid duplicates
+      if (!player.dutchPile.includes(card.id)) {
+        // Insert at original index (clamp)
+        const insertIndex = Math.min(player.heldFromVisibleIndex, player.dutchPile.length);
+        player.dutchPile.splice(insertIndex, 0, card.id);
+        this.repositionDutchPile(player, card.owner);
+      }
+      player.heldFromVisibleIndex = -1; // reset
+    }
   }
 
   repositionDutchPile(player: Player, playerId: string): void {
@@ -157,6 +170,7 @@ export class MyRoom extends Room<MyState> {
     // Reset pile
     pile.cardStack = [];
     pile.topCard = -1;
+  pile.color = ""; // allow new sequence
   }
 
   restartGame(): void {
@@ -269,12 +283,11 @@ export class MyRoom extends Room<MyState> {
         return;
       }
       
-      // Check if card is from valid source (top of Blitz or Dutch pile)
+      // Valid sources: top of Blitz or ANY visible Dutch row card
       const isTopOfBlitz = player.blitzPile.length > 0 && player.blitzPile[player.blitzPile.length - 1] === card.id;
-      const isTopOfDutch = player.dutchPile.length > 0 && player.dutchPile[player.dutchPile.length - 1] === card.id;
-      
-      if (!isTopOfBlitz && !isTopOfDutch) {
-        console.log('Pickup ignored: card not from top of valid pile');
+      const isVisibleDutch = player.dutchPile.includes(card.id);
+      if (!isTopOfBlitz && !isVisibleDutch) {
+        console.log('Pickup ignored: card not from a valid personal pile (blitz top or visible dutch row)');
         return;
       }
       
@@ -293,15 +306,17 @@ export class MyRoom extends Room<MyState> {
           const nextCard = this.state.cards.get(nextCardId);
           if (nextCard) nextCard.faceUp = true;
         }
-      } else if (isTopOfDutch) {
-        player.dutchPile.pop();
-        // Refill Dutch pile from Post pile
-        this.fillDutchPile(player);
-        // Reposition remaining Dutch cards
+      } else if (isVisibleDutch) {
+        // Remove specific card from visible row but DO NOT refill yet; refill only after successful drop
+        const idx = player.dutchPile.indexOf(card.id);
+        if (idx !== -1) {
+          player.dutchPile.splice(idx, 1);
+          player.heldFromVisibleIndex = idx; // remember where to restore if drop invalid
+        }
         this.repositionDutchPile(player, client.sessionId);
       }
       
-      console.log(`Player ${client.sessionId} picked up card ${card.id} from ${isTopOfBlitz ? 'Blitz' : 'Dutch'} pile`);
+      console.log(`Player ${client.sessionId} picked up card ${card.id} from ${isTopOfBlitz ? 'Blitz top' : 'visible Dutch row'}`);
     });
     this.onMessage("drop", (client, message) => {
       console.log('Drop message received:', message);
@@ -331,9 +346,9 @@ export class MyRoom extends Room<MyState> {
         return;
       }
       
-      // Validate sequence move
-      if (!this.isValidSequenceMove(card, pile)) {
-        console.log(`Drop rejected: invalid sequence. Card ${card.value} cannot be placed on pile with ${pile.cardStack.length > 0 ? this.state.cards.get(pile.cardStack[pile.cardStack.length - 1])?.value : 'empty'} cards`);
+      // Validate sequence + color move
+  if (!this.isValidSequenceMove(card, pile)) {
+        console.log(`Drop rejected: invalid sequence/color. Card ${card.color} ${card.value} cannot be placed on pile with ${pile.cardStack.length > 0 ? this.state.cards.get(pile.cardStack[pile.cardStack.length - 1])?.value : 'empty'} cards (pile color: ${pile.color || 'unset'})`);
         this.returnCardToPlayer(player, card);
         return;
       }
@@ -341,6 +356,12 @@ export class MyRoom extends Room<MyState> {
       // Valid drop
       card.pickedUp = false;
       player.heldCard = "";
+      // If card came from visible dutch row, now that drop is successful we can refill slot
+      if (player.heldFromVisibleIndex !== -1) {
+        this.fillDutchPile(player); // will add new top cards if available
+        this.repositionDutchPile(player, client.sessionId);
+        player.heldFromVisibleIndex = -1;
+      }
       
       // Add to pile
       pile.cardStack.push(card.id);
@@ -349,6 +370,10 @@ export class MyRoom extends Room<MyState> {
       card.x = pile.x + stackOffset;
       card.y = pile.y;
       
+      // Assign pile color if first card
+      if (pile.cardStack.length === 1) {
+        pile.color = card.color;
+      }
       // Update player score (+1 for each card placed on Dutch Pile)
       player.score += 1;
       
