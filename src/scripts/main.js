@@ -470,20 +470,7 @@ window.syncColyseusState = function(state) {
             }
             pileEntity.model.material = pileMaterial;
             
-            // Add a simple label entity above Dutch piles
-            if (pile.type === "dutch") {
-                var labelEntity = new pc.Entity();
-                labelEntity.addComponent('model', { type: 'box' });
-                labelEntity.setLocalScale(1, 0.1, 0.5); // thin rectangular label
-                
-                var labelMaterial = new pc.StandardMaterial();
-                labelMaterial.diffuse.set(0.2, 0.2, 0.2); // dark gray
-                labelEntity.model.material = labelMaterial;
-                
-                labelEntity.setLocalPosition(0, 1.0, 0); // above pile
-                pileEntity.addChild(labelEntity);
-                pileEntity.labelEntity = labelEntity;
-            }
+            // Removed 3D labelEntity previously placed atop Dutch piles.
             
             // Store pile info for HTML label creation
             pileEntity.pileType = pile.type;
@@ -493,39 +480,20 @@ window.syncColyseusState = function(state) {
             piles[id] = pileEntity;
         }
         
-        // Update Dutch pile appearance based on contents
-        if (pile.type === "dutch" && piles[id].labelEntity) {
+        // Update Dutch pile appearance (label entity removed)
+        if (pile.type === "dutch") {
             var material = piles[id].model.material;
-            var labelMaterial = piles[id].labelEntity.model.material;
-            
             if (pile.cardStack && pile.cardStack.length > 0) {
-                // Get the top card to determine pile color
                 var topCardId = pile.cardStack[pile.cardStack.length - 1];
                 var topCard = state.cards.get(topCardId);
-                
                 if (topCard) {
-                    // Set pile color to match the sequence color
-                    if (topCard.color === 'red') {
-                        material.diffuse.set(1, 0.3, 0.3);
-                        labelMaterial.diffuse.set(0.8, 0.2, 0.2); // darker red for label
-                    }
-                    else if (topCard.color === 'green') {
-                        material.diffuse.set(0.3, 1, 0.3);
-                        labelMaterial.diffuse.set(0.2, 0.8, 0.2); // darker green for label
-                    }
-                    else if (topCard.color === 'blue') {
-                        material.diffuse.set(0.3, 0.3, 1);
-                        labelMaterial.diffuse.set(0.2, 0.2, 0.8); // darker blue for label
-                    }
-                    else if (topCard.color === 'yellow') {
-                        material.diffuse.set(1, 1, 0.3);
-                        labelMaterial.diffuse.set(0.8, 0.8, 0.2); // darker yellow for label
-                    }
+                    if (topCard.color === 'red') material.diffuse.set(1, 0.3, 0.3);
+                    else if (topCard.color === 'green') material.diffuse.set(0.3, 1, 0.3);
+                    else if (topCard.color === 'blue') material.diffuse.set(0.3, 0.3, 1);
+                    else if (topCard.color === 'yellow') material.diffuse.set(1, 1, 0.3);
                 }
             } else {
-                // Empty pile
                 material.diffuse.set(0.7, 0.7, 0.7);
-                labelMaterial.diffuse.set(0.2, 0.2, 0.2); // dark gray for empty
             }
         }
         
