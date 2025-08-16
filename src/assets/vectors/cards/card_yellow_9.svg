@@ -3,7 +3,7 @@
   <defs>
     <linearGradient id="grad_yellow_9_filled" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#e3c132" />
-      <stop offset="100%" stop-color="#e3c132" />
+      <stop offset="100%" stop-color="#b69719" />
     </linearGradient>
     <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
       <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="rgba(0,0,0,0.35)" />

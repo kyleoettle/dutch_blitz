@@ -9,7 +9,9 @@ export const VISIBLE_SPACING = 3; // spacing between visible (Post) slots
 export const RIGHTMOST_OFFSET = 2.6; // offset from blitz pile center to right-most visible slot
 export const WOOD_OFFSET_Y = 4; // vertical offset for wood pile under visible row
 export const DUTCH_DROP_RADIUS = 2.0; // proximity radius for dropping on shared pile
-export const POST_PLACE_RADIUS = 2.0; // proximity radius for placing into visible slot
+// Proximity radius for placing into a visible (post) slot
+// Reverted to original tight value to prevent accidental slot placement when moving toward center
+export const POST_PLACE_RADIUS = 2.0; //
 export const CANCEL_RADIUS = 1.5; // radius for cancel/return action
 export const MAX_VISIBLE_SLOTS = 3;
 export const BLITZ_COUNT = 10; // number of blitz cards per player
