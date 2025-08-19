@@ -31,28 +31,28 @@ export class DeckRefillService {
   }
 
   fillDutchPile(player: Player): void {
-    while (player.dutchPile.length < MAX_VISIBLE_SLOTS && player.postPile.length > 0) {
-      const cardId = player.postPile.shift()!;
+    while (player.postPile.length < MAX_VISIBLE_SLOTS && player.reserveCards.length > 0) {
+      const cardId = player.reserveCards.shift()!;
       const card = this.state.cards.get(cardId);
       if (card) {
         card.faceUp = true;
-        player.dutchPile.push(cardId);
+        player.postPile.push(cardId);
       }
     }
-    if (player.dutchPile.length < MAX_VISIBLE_SLOTS && player.postPile.length === 0) {
+    if (player.postPile.length < MAX_VISIBLE_SLOTS && player.reserveCards.length === 0) {
       this.cycleDutchPile(player);
     }
   }
 
   cycleDutchPile(player: Player): void {
-    if (player.dutchPile.length <= 1) return;
-    const cardsToRecycle = player.dutchPile.splice(0, player.dutchPile.length - 1);
+    if (player.postPile.length <= 1) return;
+    const cardsToRecycle = player.postPile.splice(0, player.postPile.length - 1);
     cardsToRecycle.reverse();
     cardsToRecycle.forEach(cardId => {
       const card = this.state.cards.get(cardId);
       if (card) {
         card.faceUp = false;
-        player.postPile.push(cardId);
+        player.reserveCards.push(cardId);
       }
     });
     this.fillDutchPile(player);
@@ -60,10 +60,10 @@ export class DeckRefillService {
 
   drawFromWood(player: Player): void {
     for (let i = 0; i < MAX_VISIBLE_SLOTS; i++) {
-      if (player.dutchPile[i] === "" && player.postPile.length > 0) {
-        const cardId = player.postPile.shift()!;
+      if (player.postPile[i] === "" && player.reserveCards.length > 0) {
+        const cardId = player.reserveCards.shift()!;
         const card = this.state.cards.get(cardId);
-        if (card) { card.faceUp = true; player.dutchPile[i] = cardId; }
+        if (card) { card.faceUp = true; player.postPile[i] = cardId; }
       }
     }
   }

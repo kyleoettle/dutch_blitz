@@ -66,7 +66,7 @@ describe('Wood Indicator behaviors', () => {
     c1.send('pickup', { cardId: prevTop }); await waitNext(room);
     assert.strictEqual(p1.heldCard, prevTop, 'Picked top indicator card');
     // Drop back to indicator
-    c1.send('drop', { pileId: 'wood_indicator_' + c1.sessionId });
+  c1.send('place', { pileId: 'wood_indicator_' + c1.sessionId });
     await waitNext(room);
     assert.strictEqual(p1.heldCard, '', 'Card released after drop-back');
     const newTop = indicator.cardStack[indicator.cardStack.length - 1];
@@ -88,7 +88,7 @@ describe('Wood Indicator behaviors', () => {
     const topWood = p1.postPile[p1.postPile.length - 1];
     c1.send('pickup', { cardId: topWood }); await waitNext(room);
     p1.x = indicator.x; p1.y = indicator.y;
-    c1.send('drop', { pileId: 'wood_indicator_' + c1.sessionId }); await waitNext(room);
+  c1.send('place', { pileId: 'wood_indicator_' + c1.sessionId }); await waitNext(room);
     assert.strictEqual(indicator.cardStack[indicator.cardStack.length - 1], topWood, 'Wood card placed on indicator');
     const placed = getCard(room, topWood); assert.ok(placed.faceUp, 'Placed wood card becomes faceUp');
     // Attempt to pick it (should work)

@@ -19,8 +19,8 @@ function getPlayer(room: any, sessionId: string): Player { return room.state.pla
 function getCard(room: any, id: string): Card { return room.state.cards.get(id); }
 
 function findBlitzTop(player: Player): string | undefined { return player.blitzPile[player.blitzPile.length - 1]; }
-function firstVisibleSlotCard(player: Player): string | undefined { return player.dutchPile.find(id => id && id !== ''); }
-function firstEmptySlot(player: Player): number { return player.dutchPile.indexOf(''); }
+function firstVisibleSlotCard(player: Player): string | undefined { return player.postPile.find(id => id && id !== ''); }
+function firstEmptySlot(player: Player): number { return player.postPile.indexOf(''); }
 function getSlotPositions(playerIndex: number) {
   const angle = (playerIndex * 2 * Math.PI) / 8;
   const pileRadius = 20; // must match server constants
@@ -43,12 +43,12 @@ describe('MyRoom core behaviors', () => {
     const { room, client1 } = await joinTwoPlayers(colyseus);
     const p1 = getPlayer(room, client1.sessionId);
     assert.strictEqual(p1.blitzPile.length, 10);
-  // 40-card deck: 10 blitz + 3 visible + 27 remaining wood/post
-  assert.strictEqual(p1.postPile.length, 27);
-    assert.strictEqual(p1.dutchPile.length, 3);
+  // 40-card deck: 10 blitz + 3 visible + 27 remaining wood/reserve
+  assert.strictEqual(p1.reserveCards.length, 27);
+    assert.strictEqual(p1.postPile.length, 3);
     p1.blitzPile.forEach(id => { const c = getCard(room, id); assert.ok(c.faceUp); });
-    p1.dutchPile.forEach(id => { const c = getCard(room, id); assert.ok(c.faceUp); });
-    p1.postPile.forEach(id => { const c = getCard(room, id); assert.strictEqual(c.faceUp, false); });
+    p1.postPile.forEach(id => { const c = getCard(room, id); assert.ok(c.faceUp); });
+    p1.reserveCards.forEach(id => { const c = getCard(room, id); assert.strictEqual(c.faceUp, false); });
   });
 
   it('pickup restrictions: only top blitz allowed, visible slot, or top wood', async () => {
@@ -64,14 +64,14 @@ describe('MyRoom core behaviors', () => {
     assert.strictEqual(p1.heldCard, topBlitz);
   });
 
-  it('placePost: move blitz card into empty slot (proximity needed)', async () => {
+  it('place: move blitz card into empty slot (proximity needed)', async () => {
     const { room, client1 } = await joinTwoPlayers(colyseus);
     const p1 = getPlayer(room, client1.sessionId);
   const topBlitz = findBlitzTop(p1)!;
   // Free up a visible slot by removing first visible card (simulate card played)
   const slotIdxToFree = 0;
-  const removed = p1.dutchPile[slotIdxToFree];
-  p1.dutchPile[slotIdxToFree] = '';
+  const removed = p1.postPile[slotIdxToFree];
+  p1.postPile[slotIdxToFree] = '';
   if (removed) room.state.cards.delete(removed);
   client1.send('pickup', { cardId: topBlitz });
   await waitNext(room);
@@ -79,34 +79,34 @@ describe('MyRoom core behaviors', () => {
   const playerIndex = Array.from(room.state.players.keys()).indexOf(client1.sessionId);
   const slotPositions = getSlotPositions(playerIndex);
   p1.x = slotPositions[emptySlot].x; p1.y = slotPositions[emptySlot].y; // move into proximity
-  client1.send('placePost', { slot: emptySlot });
+    client1.send('place', { slot: emptySlot });
   await waitNext(room);
   assert.strictEqual(p1.heldCard, '', 'Card should be released after successful placement');
-  assert.strictEqual(p1.dutchPile[emptySlot], topBlitz, 'Blitz card should occupy the empty slot');
+  assert.strictEqual(p1.postPile[emptySlot], topBlitz, 'Blitz card should occupy the empty slot');
   });
 
   it('drop onto dutch pile: sequence + color enforcement', async () => {
     const { room, client1, client2 } = await joinTwoPlayers(colyseus);
     const p1 = getPlayer(room, client1.sessionId);
     const p2 = getPlayer(room, client2.sessionId);
-  const oneCandidate = p1.dutchPile.map(id => getCard(room, id)).find(c => c && c.value === 1);
+  const oneCandidate = p1.postPile.map(id => getCard(room, id)).find(c => c && c.value === 1);
   if (!oneCandidate) { return; } // skip if random distribution lacks a 1 in visible row
   const oneCardId = oneCandidate.id;
     client1.send('pickup', { cardId: oneCardId });
     await waitNext(room);
     const pile0 = room.state.piles.get('dutch_pile_0')!;
     p1.x = pile0.x; p1.y = pile0.y;
-    client1.send('drop', { pileId: 'dutch_pile_0' });
+      client1.send('place', { pileId: 'dutch_pile_0' });
     await waitNext(room);
     assert.strictEqual(p1.heldCard, '');
     assert.ok(pile0.cardStack.includes(oneCardId));
     const pileColor = pile0.color; assert.ok(pileColor);
-    const p2Card = p2.dutchPile.map(id => getCard(room, id)).find(c => c.value === 2 && c.color !== pileColor);
+    const p2Card = p2.postPile.map(id => getCard(room, id)).find(c => c.value === 2 && c.color !== pileColor);
     if (p2Card) {
       client2.send('pickup', { cardId: p2Card.id });
       await waitNext(room);
       p2.x = pile0.x; p2.y = pile0.y;
-      client2.send('drop', { pileId: 'dutch_pile_0' });
+        client2.send('place', { pileId: 'dutch_pile_0' });
       await waitNext(room);
       assert.strictEqual(p2.heldCard, p2Card.id);
     }
@@ -115,33 +115,33 @@ describe('MyRoom core behaviors', () => {
   it('proximity gating prevents distant drop', async () => {
     const { room, client1 } = await joinTwoPlayers(colyseus);
     const p1 = getPlayer(room, client1.sessionId);
-  const oneCard = p1.dutchPile.map(id => getCard(room, id)).find(c => c && c.value === 1);
+  const oneCard = p1.postPile.map(id => getCard(room, id)).find(c => c && c.value === 1);
   if (!oneCard) { return; }
     client1.send('pickup', { cardId: oneCard.id });
     await waitNext(room);
     const pile0 = room.state.piles.get('dutch_pile_0')!;
     p1.x = pile0.x + 10; p1.y = pile0.y + 10;
-    client1.send('drop', { pileId: 'dutch_pile_0' });
+  client1.send('place', { pileId: 'dutch_pile_0' });
     await waitNext(room);
     assert.strictEqual(p1.heldCard, oneCard.id);
   });
 
-  it('placePost fails when far from slot', async () => {
+  it('place fails when far from slot', async () => {
     const { room, client1 } = await joinTwoPlayers(colyseus);
     const p1 = getPlayer(room, client1.sessionId);
     // Free a slot
-    const removed = p1.dutchPile[1];
-    p1.dutchPile[1] = '';
+    const removed = p1.postPile[1];
+    p1.postPile[1] = '';
     if (removed) room.state.cards.delete(removed);
     const topBlitz = findBlitzTop(p1)!;
     client1.send('pickup', { cardId: topBlitz });
     await waitNext(room);
     // Move player far away
     p1.x += 50; p1.y += 50;
-    client1.send('placePost', { slot: 1 });
+    client1.send('place', { slot: 1 });
     await waitNext(room);
     assert.strictEqual(p1.heldCard, topBlitz, 'Should still be holding (too far)');
-    assert.strictEqual(p1.dutchPile[1], '', 'Slot should remain empty');
+    assert.strictEqual(p1.postPile[1], '', 'Slot should remain empty');
   });
 
   it('cancel only works near origin', async () => {
@@ -160,54 +160,70 @@ describe('MyRoom core behaviors', () => {
     assert.strictEqual(p1.heldCard, '');
   });
 
-  it('drawWood fills exactly empty visible slots and reveals cards', async () => {
+  it('drawWood cycles wood indicator cards when near', async () => {
     const { room, client1 } = await joinTwoPlayers(colyseus);
     const p1 = getPlayer(room, client1.sessionId);
-    // Empty two slots
-    const toRemove = [0,2];
-    toRemove.forEach(idx => {
-      const id = p1.dutchPile[idx];
-      if (id) { room.state.cards.delete(id); p1.dutchPile[idx] = ''; }
-    });
-    const preWood = p1.postPile.length;
+    const preReserve = p1.reserveCards.length;
+    const preWoodCount = p1.woodPile.length;
+    
+    // Move player close to wood indicator
+    p1.x = 5; p1.y = 5;
+    const indicatorId = `wood_indicator_${client1.sessionId}`;
+    const indicator = room.state.piles.get(indicatorId);
+    if (indicator) { indicator.x = 5; indicator.y = 5; }
+    
     client1.send('drawWood', {});
     await waitNext(room);
-    let filled = 0;
-    toRemove.forEach(idx => { if (p1.dutchPile[idx] && p1.dutchPile[idx] !== '') filled++; });
-    assert.ok(filled >= 1, 'At least one emptied slot should refill');
-    const postWood = p1.postPile.length;
-    assert.ok(postWood < preWood, 'Wood pile should shrink');
-    toRemove.forEach(idx => { if (p1.dutchPile[idx]) { const c = getCard(room, p1.dutchPile[idx]); assert.ok(c.faceUp, 'Refilled cards must be faceUp'); } });
+    
+    const postReserve = p1.reserveCards.length;
+    const postWoodCount = p1.woodPile.length;
+    
+    assert.ok(postReserve < preReserve, 'Reserve pile should shrink');
+    assert.ok(postWoodCount > preWoodCount, 'Wood pile should grow');
+    
+    // Check that only top wood card is face up
+    if (p1.woodPile.length > 0) {
+      const topId = p1.woodPile[p1.woodPile.length - 1];
+      const topCard = getCard(room, topId);
+      assert.ok(topCard.faceUp, 'Top wood card should be face up');
+      
+      // Check that other wood cards are face down
+      for (let i = 0; i < p1.woodPile.length - 1; i++) {
+        const cardId = p1.woodPile[i];
+        const card = getCard(room, cardId);
+        assert.ok(!card.faceUp, 'Non-top wood cards should be face down');
+      }
+    }
   });
 
   it('wood pickup and cancel near origin returns card face-down onto wood', async () => {
     const { room, client1 } = await joinTwoPlayers(colyseus);
     const p1 = getPlayer(room, client1.sessionId);
-    const topWoodId = p1.postPile[p1.postPile.length - 1];
-    const preWoodCount = p1.postPile.length;
-    client1.send('pickup', { cardId: topWoodId });
+    const topReserveId = p1.reserveCards[p1.reserveCards.length - 1];
+    const preReserveCount = p1.reserveCards.length;
+    client1.send('pickup', { cardId: topReserveId });
     await waitNext(room);
-    assert.strictEqual(p1.heldCard, topWoodId);
+    assert.strictEqual(p1.heldCard, topReserveId);
     // Stay near origin
     client1.send('cancel', {});
     await waitNext(room);
     assert.strictEqual(p1.heldCard, '', 'Should release after cancel near origin');
-    assert.strictEqual(p1.postPile.length, preWoodCount, 'Wood count should restore');
-    const returnedCard = getCard(room, topWoodId);
-    assert.strictEqual(returnedCard.faceUp, false, 'Returned wood card should be face-down');
+    assert.strictEqual(p1.reserveCards.length, preReserveCount, 'Reserve count should restore');
+    const returnedCard = getCard(room, topReserveId);
+    assert.strictEqual(returnedCard.faceUp, false, 'Returned reserve card should be face-down');
   });
 
   it('invalid sequence drop keeps card held and score unchanged', async () => {
     const { room, client1 } = await joinTwoPlayers(colyseus);
     const p1 = getPlayer(room, client1.sessionId);
     // Pick a non-1 visible card
-    const nonOne = p1.dutchPile.map(id => getCard(room, id)).find(c => c.value !== 1)!;
+    const nonOne = p1.postPile.map(id => getCard(room, id)).find(c => c.value !== 1)!;
     client1.send('pickup', { cardId: nonOne.id });
     await waitNext(room);
     const pile0 = room.state.piles.get('dutch_pile_0')!;
     p1.x = pile0.x; p1.y = pile0.y; // proximity ok
     const prevScore = p1.score;
-    client1.send('drop', { pileId: 'dutch_pile_0' });
+  client1.send('place', { pileId: 'dutch_pile_0' });
     await waitNext(room);
     assert.strictEqual(p1.heldCard, nonOne.id, 'Still holding after invalid drop');
     assert.strictEqual(p1.score, prevScore, 'Score must not change');
@@ -223,14 +239,14 @@ describe('MyRoom core behaviors', () => {
     p1.blitzPile = p1.blitzPile.filter(id => id === valueOneCard.id);
     if (!p1.blitzPile.includes(valueOneCard.id)) p1.blitzPile = [valueOneCard.id];
     p1.postPile = p1.postPile.filter(id => id !== valueOneCard.id);
-    p1.dutchPile = p1.dutchPile.map(id => id === valueOneCard.id ? '' : id);
+    p1.postPile = p1.postPile.map(id => id === valueOneCard.id ? '' : id);
     valueOneCard.faceUp = true;
     // Move near empty shared pile 1
     const targetPile = room.state.piles.get('dutch_pile_1')!;
     client1.send('pickup', { cardId: valueOneCard.id });
     await waitNext(room);
     p1.x = targetPile.x; p1.y = targetPile.y;
-    client1.send('drop', { pileId: 'dutch_pile_1' });
+  client1.send('place', { pileId: 'dutch_pile_1' });
     await waitNext(room);
     assert.strictEqual(room.state.gameStatus, 'finished', 'Game should finish');
     assert.strictEqual(room.state.winner, client1.sessionId, 'Winner should be player 1');
@@ -263,15 +279,15 @@ describe('MyRoom core behaviors', () => {
     // Remove from any pile arrays
     p1.blitzPile = p1.blitzPile.filter(id=>id!==topTen.id);
     p1.postPile = p1.postPile.filter(id=>id!==topTen.id);
-    const visibleIdx = p1.dutchPile.indexOf(topTen.id);
-    if (visibleIdx !== -1) p1.dutchPile[visibleIdx] = "";
+    const visibleIdx = p1.postPile.indexOf(topTen.id);
+    if (visibleIdx !== -1) p1.postPile[visibleIdx] = "";
     p1.blitzPile.push(topTen.id); // becomes top
     topTen.faceUp = true;
     client1.send('pickup', { cardId: topTen.id });
     await waitNext(room);
     p1.x = pile0.x; p1.y = pile0.y; // ensure proximity
     const prevScore = p1.score;
-    client1.send('drop', { pileId: 'dutch_pile_0' });
+  client1.send('place', { pileId: 'dutch_pile_0' });
     await waitNext(room);
     assert.strictEqual(pile0.cardStack.length, 0, 'Pile should reset after completing 10');
     assert.strictEqual(p1.score, prevScore + 1, 'Score increments by 1 for the placed 10');

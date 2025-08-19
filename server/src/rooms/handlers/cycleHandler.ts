@@ -8,10 +8,10 @@ export function registerCycleHandler(room: MyRoom) {
       console.log('Cycle ignored: invalid player state or game not playing');
       return;
     }
-    if (player.postPile.length > 0 || player.dutchPile.length > 1) {
+    if (player.reserveCards.length > 0 || player.postPile.length > 1) {
       room["deckRefill"].cycleDutchPile(player);
       (room as any)["repositionDutchPile"](player, client.sessionId);
-      console.log(`Player ${client.sessionId} cycled Dutch Pile. Post: ${player.postPile.length}, Dutch: ${player.dutchPile.length}`);
+      console.log(`Player ${client.sessionId} cycled Post Pile. Reserve: ${player.reserveCards.length}, Post: ${player.postPile.length}`);
     }
   });
 }

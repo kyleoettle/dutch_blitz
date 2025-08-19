@@ -1,0 +1,61 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Server Dev Debug (watch)",
+      "program": "${workspaceFolder}/server/node_modules/tsx/dist/cli.mjs",
+      "args": ["watch", "src/index.ts"],
+      "cwd": "${workspaceFolder}/server",
+      "skipFiles": ["<node_internals>/**"],
+      "console": "integratedTerminal",
+      "restart": true,
+      "autoAttachChildProcesses": true,
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/server/src/**/*.ts"],
+      "env": { "FORCE_COLOR": "1" }
+    },
+    {
+      "name": "Debug colyseus",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--nolazy", "-r", "ts-node/register/transpile-only"],
+      "args": ["server/src/index.ts"],
+      "cwd": "${workspaceRoot}/server",
+      "internalConsoleOptions": "openOnSessionStart",
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/server/**",
+        "!**/node_modules/**"
+      ],
+      "skipFiles": ["<node_internals>/**", "node_modules/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Server Build Debug (compiled)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "debug"],
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/server",
+      "console": "integratedTerminal",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/server/build/**/*.js"],
+      "env": {
+        "FORCE_COLOR": "1"
+      }
+    },
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Attach to Running Server",
+      "address": "127.0.0.1",
+      "port": 9229,
+      "restart": false,
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/server",
+      "sourceMaps": true
+    }
+  ]
+}

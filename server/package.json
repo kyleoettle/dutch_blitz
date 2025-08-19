@@ -8,7 +8,10 @@
     "node": ">= 20.9.0"
   },
   "scripts": {
-    "start": "tsx watch src/index.ts",
+  "start": "tsx watch src/index.ts",
+  "dev:debug": "tsx watch src/index.ts",
+  "dev:inspect": "tsx --inspect=127.0.0.1:9229 watch src/index.ts",
+  "debug": "npm run build && node --inspect=127.0.0.1:9229 --enable-source-maps build/index.js",
     "loadtest": "tsx loadtest/example.ts --room my_room --numClients 2",
     "build": "npm run clean && tsc",
     "clean": "rimraf build",
@@ -28,6 +31,7 @@
     "mocha": "^10.2.0",
     "rimraf": "^5.0.0",
     "tsx": "^4.10.2",
+  "cross-env": "^7.0.3",
     "typescript": "^5.0.4"
   },
   "dependencies": {

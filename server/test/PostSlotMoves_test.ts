@@ -15,12 +15,12 @@ async function joinTwo(colyseus: ColyseusTestServer) {
 function getPlayer(room: any, id: string): Player { return room.state.players.get(id); }
 function getCard(room: any, id: string): Card { return room.state.cards.get(id); }
 
-function firstEmptySlot(p: Player) { return p.dutchPile.indexOf(''); }
+function firstEmptySlot(p: Player) { return p.postPile.indexOf(''); }
 
 // Helper: free a slot at index by removing the card entirely (simulate that card being played elsewhere)
 function freeSlot(room: any, p: Player, idx: number) {
-  const id = p.dutchPile[idx];
-  if (id) { room.state.cards.delete(id); p.dutchPile[idx] = ''; }
+  const id = p.postPile[idx];
+  if (id) { room.state.cards.delete(id); p.postPile[idx] = ''; }
 }
 
 describe('Post slot move scenarios', () => {
@@ -36,7 +36,7 @@ describe('Post slot move scenarios', () => {
     freeSlot(room, p1, 1);
     await waitNext(room);
     const sourceIdx = 0;
-    const cardId = p1.dutchPile[sourceIdx];
+    const cardId = p1.postPile[sourceIdx];
     assert.ok(cardId, 'Need a source card');
     // Pick up from slot 0
     c1.send('pickup', { cardId });
@@ -44,9 +44,9 @@ describe('Post slot move scenarios', () => {
     // Move player near emptied slot 1
     const slotPositions = (room as any).getVisibleSlotPositions(c1.sessionId, p1);
     p1.x = slotPositions[1].x; p1.y = slotPositions[1].y;
-    c1.send('placePost', { slot: 1 });
+  c1.send('place', { slot: 1 });
     await waitNext(room);
-    assert.strictEqual(p1.dutchPile[1], cardId, 'Card should occupy new empty slot');
+    assert.strictEqual(p1.postPile[1], cardId, 'Card should occupy new empty slot');
     assert.strictEqual(p1.heldCard, '', 'Should release card after placement');
   });
 
@@ -60,9 +60,9 @@ describe('Post slot move scenarios', () => {
     await waitNext(room);
     const slotPositions = (room as any).getVisibleSlotPositions(c1.sessionId, p1);
     p1.x = slotPositions[2].x; p1.y = slotPositions[2].y;
-    c1.send('placePost', { slot: 2 });
+  c1.send('place', { slot: 2 });
     await waitNext(room);
-    assert.strictEqual(p1.dutchPile[2], topBlitz, 'Top blitz card should move into empty slot');
+    assert.strictEqual(p1.postPile[2], topBlitz, 'Top blitz card should move into empty slot');
     assert.strictEqual(p1.blitzPile.includes(topBlitz), false, 'Card removed from blitz pile');
   });
 
@@ -71,17 +71,17 @@ describe('Post slot move scenarios', () => {
     const p1 = getPlayer(room, c1.sessionId);
     // Empty slot 0
     freeSlot(room, p1, 0); await waitNext(room);
-    // Pick top wood (postPile last element)
-    const topWood = p1.postPile[p1.postPile.length - 1];
-    c1.send('pickup', { cardId: topWood });
+    // Pick top reserve card (reserveCards last element)
+    const topReserve = p1.reserveCards[p1.reserveCards.length - 1];
+    c1.send('pickup', { cardId: topReserve });
     await waitNext(room);
     const slotPositions = (room as any).getVisibleSlotPositions(c1.sessionId, p1);
     p1.x = slotPositions[0].x; p1.y = slotPositions[0].y;
-    c1.send('placePost', { slot: 0 });
+  c1.send('place', { slot: 0 });
     await waitNext(room);
-    assert.strictEqual(p1.dutchPile[0], topWood, 'Top wood card should move into empty slot');
-    assert.ok(!p1.postPile.includes(topWood), 'Card removed from wood pile');
-    const placedCard = getCard(room, topWood);
+    assert.strictEqual(p1.postPile[0], topReserve, 'Top reserve card should move into empty slot');
+    assert.ok(!p1.reserveCards.includes(topReserve), 'Card removed from reserve pile');
+    const placedCard = getCard(room, topReserve);
     assert.ok(placedCard.faceUp, 'Card should be faceUp after entering visible slot');
   });
 
@@ -90,7 +90,7 @@ describe('Post slot move scenarios', () => {
     const p1 = getPlayer(room, c1.sessionId);
     // Free slots 0 and 2, leave slot 1 occupied; pick card from slot 1
     freeSlot(room, p1, 0); freeSlot(room, p1, 2); await waitNext(room);
-    const sourceCard = p1.dutchPile[1];
+    const sourceCard = p1.postPile[1];
     assert.ok(sourceCard, 'Need a source card in slot 1');
     c1.send('pickup', { cardId: sourceCard });
     await waitNext(room);
@@ -98,10 +98,10 @@ describe('Post slot move scenarios', () => {
     const slotPositions = (room as any).getVisibleSlotPositions(c1.sessionId, p1);
     const pos2 = slotPositions[2];
     p1.x = pos2.x; p1.y = pos2.y;
-    // Send placePost WITHOUT specifying slot -> should choose nearest empty (slot 2)
-    c1.send('placePost', {} as any);
+  // Send place WITHOUT specifying slot -> should choose nearest empty (slot 2)
+  c1.send('place', {} as any);
     await waitNext(room);
-    assert.strictEqual(p1.dutchPile[2], sourceCard, 'Card should land in nearest empty slot (2)');
+    assert.strictEqual(p1.postPile[2], sourceCard, 'Card should land in nearest empty slot (2)');
     assert.strictEqual(p1.heldCard, '', 'Card released');
   });
 });

@@ -1,0 +1,68 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Placement Tests",
+			"type": "shell",
+			"command": "cd server && npm test -- --testNamePattern=\"Post.*|placement|placement.*\"",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Run Post Tests",
+			"type": "shell",
+			"command": "cd server && npm test -- --testNamePattern=\"Post\"",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Run All Tests",
+			"type": "shell",
+			"command": "cd server && npm test",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Run Post Tests",
+			"type": "shell",
+			"command": "cd server && npm test -- --testNamePattern=\"Post\"",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Run Post Tests",
+			"type": "shell",
+			"command": "cd server && npm test -- --testNamePattern=\"Post\"",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Run Wood Tests",
+			"type": "shell",
+			"command": "cd server && npm test -- --testNamePattern=\"Wood.*|wood.*\"",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Run Wood Tests",
+			"type": "shell",
+			"command": "cd server && npm test -- --testNamePattern=\"Wood\"",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "test"
+		}
+	]
+}

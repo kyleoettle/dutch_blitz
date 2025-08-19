@@ -1,41 +1,19 @@
 import { MyRoom } from "../MyRoom";
 import { Client } from "colyseus";
-import { WOOD_DRAW_RADIUS, MAX_VISIBLE_SLOTS } from "../constants";
+import { WOOD_DRAW_RADIUS } from "../constants";
 
 export function registerDrawWoodHandler(room: MyRoom) {
   room.onMessage("drawWood", (client: Client) => {
     const player = room.state.players.get(client.sessionId);
     if (!player || room.state.gameStatus !== "playing") return;
-    if (player.postPile.length === 0) return; // nothing to draw
+    if (player.reserveCards.length === 0) return; // nothing to draw
 
     // Find this player's wood indicator pile
     const indicatorId = `wood_indicator_${client.sessionId}`;
     const indicator = room.state.piles.get(indicatorId);
     if (!indicator) return;
-    // First: fill empty visible (dutch) slots from wood WITHOUT proximity requirement (tests expect this behavior)
-    let hasEmpty = false;
-    for (let i = 0; i < MAX_VISIBLE_SLOTS; i++) if (player.dutchPile[i] === '') { hasEmpty = true; break; }
-    if (hasEmpty) {
-      let filledVisible = 0;
-      for (let i = 0; i < MAX_VISIBLE_SLOTS; i++) {
-        if (player.dutchPile[i] === '' && player.postPile.length > 0) {
-          const cardId = player.postPile.shift()!;
-          const card = room.state.cards.get(cardId);
-          if (card) {
-            card.faceUp = true;
-            player.dutchPile[i] = cardId;
-            filledVisible++;
-          }
-        }
-      }
-      if (filledVisible > 0) {
-        (room as any)["repositionDutchPile"](player, client.sessionId);
-        console.log(`Player ${client.sessionId} drew ${filledVisible} card(s) into visible slots. Wood remaining: ${player.postPile.length}`);
-        return;
-      }
-    }
 
-    // No empty visible slots: require proximity to cycle indicator trio
+    // Require proximity to cycle indicator trio
     const dx = player.x - indicator.x;
     const dy = player.y - indicator.y;
     const dist = Math.sqrt(dx*dx + dy*dy);
@@ -43,17 +21,19 @@ export function registerDrawWoodHandler(room: MyRoom) {
       console.log(`Player ${client.sessionId} too far from wood indicator (${dist.toFixed(2)} > ${WOOD_DRAW_RADIUS}).`);
       return;
     }
-    // If no visible slots were filled, use indicator trio cycling logic
+    
+    // Cycle indicator trio - return previous cards to reserve and draw 3 new ones
     const prevStack = [...indicator.cardStack];
     indicator.cardStack = [];
+    player.woodPile = []; // will rebuild
     prevStack.forEach(id => {
       const c = room.state.cards.get(id);
       if (c) c.faceUp = false;
-      player.postPile.push(id);
+      player.reserveCards.push(id);
     });
     let drawn = 0;
-    while (drawn < 3 && player.postPile.length > 0) {
-      const cardId = player.postPile.shift()!;
+    while (drawn < 3 && player.reserveCards.length > 0) {
+      const cardId = player.reserveCards.shift()!;
       const card = room.state.cards.get(cardId);
       if (card) {
         card.faceUp = false; // set later; only final pushed becomes faceUp
@@ -64,11 +44,17 @@ export function registerDrawWoodHandler(room: MyRoom) {
       }
     }
     // Set only top card faceUp (if any)
-    if (indicator.cardStack.length > 0) {
+  if (indicator.cardStack.length > 0) {
       const topId = indicator.cardStack[indicator.cardStack.length - 1];
       const topCard = room.state.cards.get(topId);
       if (topCard) topCard.faceUp = true;
     }
-    console.log(`Player ${client.sessionId} cycled wood indicator for ${drawn} card(s). Wood remaining: ${player.postPile.length}`);
+  // Update player's woodPile to current indicator stack order (copy)
+  player.woodPile = [...indicator.cardStack];
+  
+  // Update wood pile face states to ensure only top card is face up
+  (room as any)["layout"].updateWoodPileFaceStates(player);
+  
+  console.log(`Player ${client.sessionId} cycled wood indicator for ${drawn} card(s). Reserve remaining: ${player.reserveCards.length}`);
   });
 }

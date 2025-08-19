@@ -25,7 +25,7 @@ describe("testing your Colyseus app", () => {
   const p = state.players.get(client1.sessionId);
     assert.ok(p, "Player state exists");
     assert.strictEqual(p.blitzPile.length, 10, "Blitz pile should have 10 cards");
-    assert.strictEqual(p.dutchPile.length, 3, "Visible post (dutch) slots should have 3 cards initially");
-    assert.strictEqual(p.postPile.length, 27, "Post pile should have 27 remaining cards after 3 moved visible");
+    assert.strictEqual(p.postPile.length, 3, "Visible post slots should have 3 cards initially");
+    assert.strictEqual(p.reserveCards.length, 27, "Reserve cards should have 27 remaining cards after 3 moved to postPile");
   });
 });

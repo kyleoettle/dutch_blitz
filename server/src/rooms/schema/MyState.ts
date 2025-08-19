@@ -5,13 +5,22 @@ export class Player extends Schema {
   @type("number") y: number = 0;
   @type("string") heldCard: string = "";
   @type(["string"]) blitzPile: string[] = []; // 10 cards, face-down except top
-  @type(["string"]) postPile: string[] = []; // 30 cards, face-down draw pile
-  @type(["string"]) dutchPile: string[] = []; // up to 3 cards, face-up
+  @type(["string"]) reserveCards: string[] = []; // 30 face-down reserve cards (was postPile)
+  @type(["string"]) postPile: string[] = []; // up to 3 face-up post slot cards (was dutchPile)
+  @type(["string"]) woodPile: string[] = []; // cards currently revealed from reserve via draw/cycle (press 'r')
   @type("number") score: number = 0; // for scoring system
-  @type("number") heldFromVisibleIndex: number = -1; // index in dutchPile a card was picked from (for delayed refill)
+  @type("number") heldFromVisibleIndex: number = -1; // index in postPile a card was picked from (for delayed refill)
   @type("number") heldOriginX: number = 0; // original pickup x (for proximity-based return)
   @type("number") heldOriginY: number = 0; // original pickup y
-  @type("string") heldOriginSource: string = ""; // 'blitz' | 'postSlot' | 'wood'
+  @type("string") heldOriginSource: string = ""; // 'blitz' | 'postSlot' | 'wood' | 'reserve'
+  
+  // Pile positions for proximity detection (remain fixed even when cards are picked up)
+  @type("number") blitzPileX: number = 0;
+  @type("number") blitzPileY: number = 0;
+  @type(["number"]) postSlotX: number[] = []; // x coordinates for 3 post slots
+  @type(["number"]) postSlotY: number[] = []; // y coordinates for 3 post slots
+  @type("number") woodIndicatorX: number = 0;
+  @type("number") woodIndicatorY: number = 0;
 }
 
 export class Card extends Schema {

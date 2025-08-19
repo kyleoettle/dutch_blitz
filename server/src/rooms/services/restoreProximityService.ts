@@ -26,16 +26,16 @@ export class RestoreProximityService {
     card.pickedUp = false;
     if (player.heldOriginSource === 'postSlot' && player.heldFromVisibleIndex !== -1) {
       const idx = player.heldFromVisibleIndex;
-      while (player.dutchPile.length < MAX_VISIBLE_SLOTS) player.dutchPile.push("");
+  while (player.postPile.length < MAX_VISIBLE_SLOTS) player.postPile.push("");
       if (idx >= 0 && idx < MAX_VISIBLE_SLOTS) {
-        if (player.dutchPile[idx] === "") {
-          player.dutchPile[idx] = card.id;
-        } else if (!player.dutchPile.includes(card.id)) {
-          player.dutchPile[idx] = card.id;
+        if (player.postPile[idx] === "") {
+          player.postPile[idx] = card.id;
+        } else if (!player.postPile.includes(card.id)) {
+          player.postPile[idx] = card.id;
         }
-      } else if (!player.dutchPile.includes(card.id)) {
-        const emptyIdx = player.dutchPile.indexOf("");
-        if (emptyIdx !== -1) player.dutchPile[emptyIdx] = card.id; else player.dutchPile.push(card.id);
+      } else if (!player.postPile.includes(card.id)) {
+        const emptyIdx = player.postPile.indexOf("");
+        if (emptyIdx !== -1) player.postPile[emptyIdx] = card.id; else player.postPile.push(card.id);
       }
       this.repositionVisible(player, card.owner);
     } else if (player.heldOriginSource === 'blitz') {
@@ -58,11 +58,11 @@ export class RestoreProximityService {
         card.faceUp = true;
       } else {
         // fallback to wood pile bottom
-        player.postPile.push(card.id);
+  player.reserveCards.push(card.id);
         card.faceUp = false;
       }
     } else if (player.heldOriginSource === 'wood') {
-      player.postPile.push(card.id);
+  player.reserveCards.push(card.id);
       card.faceUp = false;
       this.positionPersonal(player, card.owner, this.getPlayerAngle(card.owner));
     } else {

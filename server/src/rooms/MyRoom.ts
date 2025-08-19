@@ -7,9 +7,8 @@ import { RuleService } from "./services/ruleService";
 import { ScoringService } from "./services/scoringService";
 import { RestoreProximityService } from "./services/restoreProximityService";
 import { registerPickupHandler } from "./handlers/pickupHandler";
-import { registerDropHandler } from "./handlers/dropHandler";
 import { registerCancelHandler } from "./handlers/cancelHandler";
-import { registerPlacePostHandler } from "./handlers/placePostHandler";
+import { registerPlaceHandler } from "./handlers/placeHandler";
 import { registerDrawWoodHandler } from "./handlers/drawWoodHandler";
 import { registerCycleHandler } from "./handlers/cycleHandler";
 import { registerRestartHandler } from "./handlers/restartHandler";
@@ -41,16 +40,16 @@ export class MyRoom extends Room<MyState> {
       player.blitzPile.push(card.id);
     }
 
-    // Post Pile: 30 cards (face-down)
+    // Reserve Cards: 30 face-down cards
     for (let i = 10; i < 40; i++) {
       const card = deck[i];
       card.faceUp = false;
       this.state.cards.set(card.id, card);
-      player.postPile.push(card.id);
+      player.reserveCards.push(card.id);
     }
 
     // Dutch Pile: top 3 cards from Post Pile (face-up)
-    this.deckRefill.fillDutchPile(player);
+  this.deckRefill.fillDutchPile(player);
   }
 
   // Removed fillDutchPile / cycleDutchPile (moved to deckRefill service)
@@ -84,12 +83,13 @@ export class MyRoom extends Room<MyState> {
     this.state.players.forEach((player, playerId) => {
       // Clear personal piles
       player.blitzPile = [];
+      player.reserveCards = [];
       player.postPile = [];
-      player.dutchPile = [];
+      player.woodPile = [];
+      player.postSlotX = [];
+      player.postSlotY = [];
       player.heldCard = "";
-      player.score = 0;
-
-      // Redistribute new cards
+      player.score = 0;      // Redistribute new cards
       this.distributePlayerCards(player, playerId);
       this.layout.positionPersonalPiles(player, playerId, this.getPlayerAngle(playerId));
   this.layout.updateWoodIndicator(playerId, player);
@@ -152,11 +152,10 @@ export class MyRoom extends Room<MyState> {
 
     // Register extracted handlers
     registerPickupHandler(this);
-    registerDropHandler(this);
     registerCancelHandler(this);
     registerCycleHandler(this);
     registerDrawWoodHandler(this);
-    registerPlacePostHandler(this);
+  registerPlaceHandler(this); // unified experimental handler
     registerRestartHandler(this);
   }
 
@@ -176,14 +175,15 @@ export class MyRoom extends Room<MyState> {
 
     // Distribute cards to the new player
     this.distributePlayerCards(player, client.sessionId);
-
-    // Position player's personal piles
+    player.woodPile = [];
+    player.postSlotX = [];
+    player.postSlotY = [];    // Position player's personal piles
     this.layout.positionPersonalPiles(player, client.sessionId, angle);
 
   // Create / position wood draw indicator using computed visible slots
   this.layout.updateWoodIndicator(client.sessionId, player);
 
-    console.log(`Player ${client.sessionId} cards distributed. Blitz: ${player.blitzPile.length}, Post: ${player.postPile.length}, Dutch: ${player.dutchPile.length}`);
+  console.log(`Player ${client.sessionId} cards distributed. Blitz: ${player.blitzPile.length}, Reserve: ${player.reserveCards.length}, Post: ${player.postPile.length}`);
 
     // Start game if we have enough players (2+)
     if (this.state.players.size >= 2 && this.state.gameStatus === "waiting") {
