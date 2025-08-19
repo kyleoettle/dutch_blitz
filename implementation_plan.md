@@ -245,5 +245,14 @@ The current game uses basic colored boxes for cards. To make it feel like authen
 - [x] Multiplayer demo with 2+ players
 - [ ] Final polished game deployed on Netlify
 
+## Notes & Next Steps
+
+- Support 4 players
+- Clean up main.js
+- Remove unused code
+- Faster movement
+- More accurate placement
+- Improve UI
+
 ---
 This plan is designed for AI agents to follow step-by-step. Each phase can be expanded with subtasks as needed.
