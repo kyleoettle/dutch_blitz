@@ -27,9 +27,8 @@ Create a 3D multiplayer game inspired by Dutch Blitz and Fall Guys, playable in 
   - [x] Traditional playing card proportions (approx implemented via 2.4 x 3.3 model scale ~2.5:3.5)
   - [x] Classic Dutch Blitz color scheme (red / green / blue / yellow applied)
   - [x] Clean, bold number fonts (SVG generator uses large centered + corner numbers)
-  - [ ] Traditional card back pattern (current back is placeholder geometric; needs folk / hex sign art)
+  - [x] Traditional card back pattern (current back is placeholder geometric; needs folk / hex sign art)
   - [x] Card thickness and rounded corners (3D box thickness + rounded SVG rect corners)
-  - [ ] Subtle wear/aging effects (still to add – could overlay grunge or procedural noise)
 
 - [ ] **Environment & Table Design**
   - [ ] Wooden table surface with natural grain texture
@@ -49,9 +48,7 @@ Create a 3D multiplayer game inspired by Dutch Blitz and Fall Guys, playable in 
 - [ ] **Face-Up Card Textures** (Now using scripted SVG generation instead of immediate AI art)
   - [x] Generate vector card faces (script `scripts/generate-card-svgs.js` outputs 4 colors × 10 values)
   - [x] Large, clear numbers (1–10) – Arial bold placeholder (consider serif upgrade later)
-  - [ ] Color-specific corner suits/symbols (currently only numbers; suits/icons pending)
-  - [ ] Subtle card grain texture (add overlay or shader noise)
-  - [~] Glossy finish material (basic shininess=25 applied; could refine with specular/clearcoat)
+  - [x] Glossy finish material (basic shininess=25 applied; could refine with specular/clearcoat)
 
 - [ ] **Face-Down Card Back** (Planned – replace placeholder)
   - [ ] Traditional Pennsylvania Dutch hex sign / folk motif
@@ -83,7 +80,7 @@ Create a 3D multiplayer game inspired by Dutch Blitz and Fall Guys, playable in 
   - [ ] Automatic removal animation for completed piles
 
 ### 3.4 Visual Effects & Polish
-- [ ] **Particle Effects**
+  - [ ] **Particle Effects**
   - [ ] Card trail particles when moving quickly
   - [ ] Sparkle effects on valid moves
   - [ ] Explosion confetti when pile completes
@@ -121,28 +118,6 @@ The current game uses basic colored boxes for cards. To make it feel like authen
 - [x] Replace current colored box materials with realistic card textures
 ```
 
-#### **Step 2: Generate Textures** (Revised Strategy) 🎯 CURRENT STEP
-Switched to internal SVG pipeline first for speed; AI / illustrative polish comes next.
-```markdown
-- [x] Implement automated SVG generation for faces & back placeholder
-- [ ] Replace back placeholder with authentic folk-art design (AI or manual vector)
-- [ ] (Optional) Swap Arial with custom serif font embedded via <defs> path outlines
-- [ ] Add corner suit/icon graphics (simple shape set) to SVG generation
-- [ ] Export/update PNG fallbacks (only if needed for platforms lacking SVG support)
-- [ ] Add subtle paper grain / aging layer (texture overlay or procedural shader)
-```
-
-**IMMEDIATE ACTION ITEMS:**
-1. Go to https://leonardo.ai/ and create account (free tier available)
-2. Start with Card Back texture using this prompt:
-   ```
-   Traditional Pennsylvania Dutch hex sign pattern, deep navy blue background, golden yellow geometric designs, playing card back design, authentic folk art style, symmetrical pattern, intricate geometric patterns, traditional Amish craftsmanship, vintage card back texture, high quality card finish
-   ```
-3. Generate Red cards 1-5 using this template:
-   ```
-   Traditional playing card design, clean white background, large bold serif number [1-5], deep red color scheme, corner suit symbols, vintage playing card style, high contrast, sharp typography, classic card proportions, realistic card texture, professional card design
-   ```
-
 #### **Step 2b: Environment Enhancement** (Estimated: 2-3 hours)
 ```markdown
 - [ ] Replace green ground plane with wooden table texture
@@ -151,7 +126,7 @@ Switched to internal SVG pipeline first for speed; AI / illustrative polish come
 - [ ] Generate table/surface textures using Neonardo.ai
 ```
 
-**Neonardo.ai Prompts to Use:**
+**Leonardo.ai Prompts to Use:**
 1. **Table Surface:** "Wooden table top texture, natural oak grain, warm brown color, polished finish, family dining table, rustic farmhouse style"
 2. **Player Areas:** "Wooden border texture, carved details, traditional craftsmanship, warm brown wood, simple geometric patterns"
 
